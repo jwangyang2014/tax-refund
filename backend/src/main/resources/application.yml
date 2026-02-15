@@ -1,0 +1,39 @@
+server:
+  port: 8080
+
+spring:
+  datasource:
+    url: ${POSTGRES_DB_URL:jdbc:postgresql://localhost:5432/refund}
+    username: ${POSTGRES_DB_USERNAME:postgres}
+    password: ${POSTGRES_DB_PASSWORD:postgres}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    enabled: true
+
+app:
+  security:
+    jwt:
+      secret: ${APP_SECURITY_JWT_SECRET:change-me-change-me-change-me-change-me-123456}
+      issuer: ${APP_SECURITY_JWT_ISSUER:refund-status}
+      accessTokenMinutes: 15
+      refreshTokenDays: 14
+    cookies:
+      refreshName: refresh_token
+      secure: false # true in prod (https)
+      sameSite: Lax
+
+ai:
+  provider: ${AI_PROVIDER:mock}   # mock | openai
+  openai:
+    apiKey: ${OPENAI_API_KEY:}
+    model: ${OPENAI_MODEL:gpt-4o-mini}
+
+refund:
+  polling:
+    enabled: true
+    fixedDelayMs: 10000
