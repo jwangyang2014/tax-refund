@@ -72,8 +72,5 @@ public class OpenAiClient implements AiClient {
         } catch (Exception e) {
             return new PredictEtaResult(-1, "OpenAI API error: " + e.getMessage(), "openai", model);
         }
-
-
-        return null;
     }
 }
