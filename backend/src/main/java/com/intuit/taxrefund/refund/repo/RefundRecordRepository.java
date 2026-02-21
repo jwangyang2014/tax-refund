@@ -6,7 +6,7 @@ import com.intuit.taxrefund.refund.model.RefundRecord;
 
 import java.util.Optional;
 
-public interface RefundRecordRepository extends JpaRepository {
+public interface RefundRecordRepository extends JpaRepository<RefundRecord, Long> {
     Optional<RefundRecord> findTopByUserIdOrderByTaxYearDesc(Long userId);
     Optional<RefundRecord> findByUserIdAndTaxYear(Long userId, Integer taxYear);
 }

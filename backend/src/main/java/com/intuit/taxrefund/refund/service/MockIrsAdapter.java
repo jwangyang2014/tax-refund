@@ -1,11 +1,13 @@
 package com.intuit.taxrefund.refund.service;
 
 import com.intuit.taxrefund.refund.model.RefundStatus;
+import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+@Component
 public class MockIrsAdapter implements IrsAdapter {
     private final Map<Long, IrsRefundResult> store = new ConcurrentHashMap<>();
 

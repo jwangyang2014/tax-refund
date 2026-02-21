@@ -1,6 +1,9 @@
 server:
   port: 8080
 
+logging:
+  level:
+    org.springframework.security: DEBUG
 spring:
   datasource:
     url: ${POSTGRES_DB_URL:jdbc:postgresql://localhost:5432/refund}

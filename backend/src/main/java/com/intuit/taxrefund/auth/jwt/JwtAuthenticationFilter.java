@@ -34,7 +34,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         try {
-            String token = authHeader.substring(BEARER.length() + 1);
+            String token = authHeader.substring(BEARER.length());
             JwtService.JwtPrincipal principal = jwtService.parseAndValidate(token);
             String role = principal.role() == null ? "USER" : principal.role();
             List<SimpleGrantedAuthority> authorities = List.of(new SimpleGrantedAuthority("ROLE_" + role));

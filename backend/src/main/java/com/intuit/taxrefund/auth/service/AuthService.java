@@ -34,7 +34,7 @@ public class AuthService {
             RefreshTokenRepository refreshRepo,
             JwtService jwtService,
             PasswordPolicy passwordPolicy,
-            @Value("app.security.jwt.refreshTokenDays") long refreshTokenDays
+            @Value("${app.security.jwt.refreshTokenDays}") long refreshTokenDays
     ) {
         this.userRepo = userRepo;
         this.refreshRepo = refreshRepo;
