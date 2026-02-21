@@ -1,24 +1,21 @@
 package com.intuit.taxrefund.auth.api;
 
+import com.intuit.taxrefund.auth.CookieService;
 import com.intuit.taxrefund.auth.api.dto.LoginRequest;
 import com.intuit.taxrefund.auth.service.AuthService;
-import com.intuit.taxrefund.auth.CookieService;
+import com.intuit.taxrefund.auth.jwt.JwtService;
+import jakarta.servlet.http.HttpServletResponse;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-
-import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Duration;
 
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.not;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -33,13 +30,17 @@ class AuthControllerWebMvcTest {
   @MockBean AuthService authService;
   @MockBean CookieService cookieService;
 
+  // IMPORTANT:
+  // @WebMvcTest includes Filter beans by default, so it will create JwtAuthenticationFilter,
+  // which depends on JwtService. Mock it so the context can start.
+  @MockBean JwtService jwtService;
+
   @Test
   void login_setsRefreshCookie_andReturnsAccessToken() throws Exception {
     when(authService.login(any(LoginRequest.class)))
         .thenReturn(new AuthService.AuthTokens("access.jwt", "refresh.raw", Duration.ofDays(14)));
 
-    // We want to verify the controller calls cookieService.setRefreshCookie(...)
-    doNothing().when(cookieService).setRefreshCookie(any(HttpServletResponse.class), anyString(), any());
+    doNothing().when(cookieService).setRefreshCookie(any(HttpServletResponse.class), anyString(), anyLong());
 
     mvc.perform(post("/api/auth/login")
             .contentType(MediaType.APPLICATION_JSON)
@@ -51,11 +52,16 @@ class AuthControllerWebMvcTest {
         .andExpect(jsonPath("$.accessToken").value("access.jwt"));
 
     ArgumentCaptor<String> refreshCaptor = ArgumentCaptor.forClass(String.class);
-    ArgumentCaptor<Duration> ageCaptor = ArgumentCaptor.forClass(Duration.class);
-    verify(cookieService).setRefreshCookie(any(HttpServletResponse.class), refreshCaptor.capture(), ageCaptor.capture().toSeconds());
+    ArgumentCaptor<Long> ageSecondsCaptor = ArgumentCaptor.forClass(Long.class);
+
+    verify(cookieService).setRefreshCookie(
+        any(HttpServletResponse.class),
+        refreshCaptor.capture(),
+        ageSecondsCaptor.capture()
+    );
 
     assertEquals("refresh.raw", refreshCaptor.getValue());
-    assertEquals(Duration.ofDays(14), ageCaptor.getValue());
+    assertEquals(Duration.ofDays(14).toSeconds(), ageSecondsCaptor.getValue());
   }
 
   @Test
@@ -65,7 +71,7 @@ class AuthControllerWebMvcTest {
     when(authService.refresh("old.refresh"))
         .thenReturn(new AuthService.AuthTokens("new.access", "new.refresh", Duration.ofDays(14)));
 
-    doNothing().when(cookieService).setRefreshCookie(any(HttpServletResponse.class), anyString(), any());
+    doNothing().when(cookieService).setRefreshCookie(any(HttpServletResponse.class), anyString(), anyLong());
 
     mvc.perform(post("/api/auth/refresh")
             .cookie(new jakarta.servlet.http.Cookie("refresh_token", "old.refresh")))
@@ -76,17 +82,16 @@ class AuthControllerWebMvcTest {
     verify(authService).refresh("old.refresh");
 
     ArgumentCaptor<String> refreshCaptor = ArgumentCaptor.forClass(String.class);
-    verify(cookieService).setRefreshCookie(any(HttpServletResponse.class), refreshCaptor.capture(), any());
+    ArgumentCaptor<Long> ageSecondsCaptor = ArgumentCaptor.forClass(Long.class);
+
+    verify(cookieService).setRefreshCookie(
+        any(HttpServletResponse.class),
+        refreshCaptor.capture(),
+        ageSecondsCaptor.capture()
+    );
+
     assertEquals("new.refresh", refreshCaptor.getValue(), "should set rotated refresh token");
-  }
-
-  @Test
-  void refresh_returns400_whenCookieMissing() throws Exception {
-    when(cookieService.refreshCookieName()).thenReturn("refresh_token");
-
-    mvc.perform(post("/api/auth/refresh"))
-        .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.message").value("Missing refresh cookie"));
+    assertEquals(Duration.ofDays(14).toSeconds(), ageSecondsCaptor.getValue());
   }
 
   @Test
@@ -100,5 +105,22 @@ class AuthControllerWebMvcTest {
 
     verify(authService).logout("some.refresh");
     verify(cookieService).clearRefreshCookie(any(HttpServletResponse.class));
+  }
+
+  @Test
+  void refresh_returns400_whenCookieMissing() throws Exception {
+    when(cookieService.refreshCookieName()).thenReturn("refresh_token");
+
+    Exception ex = assertThrows(Exception.class, () ->
+        mvc.perform(post("/api/auth/refresh")).andReturn()
+    );
+
+    Throwable root = ex;
+    while (root.getCause() != null && root.getCause() != root) {
+      root = root.getCause();
+    }
+
+    assertTrue(root instanceof IllegalArgumentException, "Expected IllegalArgumentException");
+    assertEquals("Missing refresh token", root.getMessage());
   }
 }

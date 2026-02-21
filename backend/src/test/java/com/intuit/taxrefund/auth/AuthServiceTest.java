@@ -12,6 +12,7 @@ import com.intuit.taxrefund.auth.service.AuthService;
 import com.intuit.taxrefund.auth.service.PasswordPolicy;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -64,11 +65,11 @@ class AuthServiceTest {
     RefreshTokenRepository refreshRepo = mock(RefreshTokenRepository.class);
     JwtService jwtService = mock(JwtService.class);
 
-    AppUser user = new AppUser("u1@example.com",
-        // bcrypt hash of "Password123!" (precomputed ok for tests)
-        "$2a$10$Q0qk0bYpE8F4mY3pG3t2quv1XzXx5y5lZ7wS1d2JQfO3o7Xr7oH9y",
-        Role.USER
-    );
+    // Generate a real bcrypt hash for the password we will use.
+    String rawPassword = "Password123!";
+    String bcryptHash = new BCryptPasswordEncoder().encode(rawPassword);
+
+    AppUser user = new AppUser("u1@example.com", bcryptHash, Role.USER);
     user.setIdForTest(1L);
 
     when(userRepo.findByEmailIgnoreCase("u1@example.com")).thenReturn(Optional.of(user));
@@ -79,8 +80,7 @@ class AuthServiceTest {
 
     AuthService svc = new AuthService(userRepo, refreshRepo, jwtService, new PasswordPolicy(), 14);
 
-    // because the bcrypt hash is fixed, we must pass the correct password
-    AuthService.AuthTokens tokens = svc.login(new LoginRequest("u1@example.com", "Password123!"));
+    AuthService.AuthTokens tokens = svc.login(new LoginRequest("u1@example.com", rawPassword));
 
     assertEquals("access.jwt", tokens.accessToken());
     assertNotNull(tokens.refreshToken());
@@ -115,11 +115,10 @@ class AuthServiceTest {
     JwtService jwtService = mock(JwtService.class);
 
     AppUser user = new AppUser("u1@example.com",
-        "$2a$10$Q0qk0bYpE8F4mY3pG3t2quv1XzXx5y5lZ7wS1d2JQfO3o7Xr7oH9y",
+        new BCryptPasswordEncoder().encode("Password123!"),
         Role.USER);
     user.setIdForTest(1L);
 
-    // Prepare stored token matching presented token
     String jti = "1234567890-abcdef";
     String raw = "randompart." + jti;
 
@@ -128,9 +127,6 @@ class AuthServiceTest {
 
     when(refreshRepo.findByJti(jti)).thenReturn(Optional.of(stored));
     when(jwtService.createAccessToken(1L, "u1@example.com", "USER")).thenReturn("access.jwt");
-
-    // capture new token insert
-    ArgumentCaptor<RefreshToken> insertCaptor = ArgumentCaptor.forClass(RefreshToken.class);
     when(refreshRepo.save(any(RefreshToken.class))).thenAnswer(inv -> inv.getArgument(0));
 
     AuthService svc = new AuthService(userRepo, refreshRepo, jwtService, new PasswordPolicy(), 14);
@@ -150,7 +146,7 @@ class AuthServiceTest {
     JwtService jwtService = mock(JwtService.class);
 
     AppUser user = new AppUser("u1@example.com",
-        "$2a$10$Q0qk0bYpE8F4mY3pG3t2quv1XzXx5y5lZ7wS1d2JQfO3o7Xr7oH9y",
+        new BCryptPasswordEncoder().encode("Password123!"),
         Role.USER);
     user.setIdForTest(1L);
 
