@@ -44,7 +44,7 @@ export default function DashboardPage(props: {
       await simulateRefundUpdate({
         taxYear: data.taxYear,
         status: next,
-        expectedAmount: data.expectedAMount ?? 1234.56,
+        expectedAmount: data.expectedAmount ?? 1234.56,
         trackingId: data.trackingId ?? 'MOCK-TRACK'
       });
 
@@ -72,8 +72,8 @@ export default function DashboardPage(props: {
       ) : (
         <div style={{ border: '1px solid #999', padding: 12, maxWidth: 720}}>
           <p><strong>Tax Year:</strong> {data.taxYear}</p>
-          <p><strong>Status:</strong> {data.status}</p>
-          <p><strong>Expected amount:</strong> {data.expectedAMount}</p>
+          <p data-testid="refund-status"><strong>Status:</strong> {data.status}</p>
+          <p><strong>Expected amount:</strong> {data.expectedAmount}</p>
           <p><strong>Tracking ID:</strong> {data.trackingId ?? 'N/A'}</p>
           <p><strong>Last updated:</strong> {new Date(data.lastUpdatedAt).toLocaleString()}</p>
 

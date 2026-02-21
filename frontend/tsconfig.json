@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "lib": ["ESNext", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+
+    "types": [
+      "vitest/globals",
+      "@testing-library/jest-dom"
+    ],
+
+    "strict": true,
+    "skipLibCheck": true
+  },
+  "include": ["src"]
+}
