@@ -8,6 +8,8 @@ import com.intuit.taxrefund.auth.model.RefreshToken;
 import com.intuit.taxrefund.auth.model.Role;
 import com.intuit.taxrefund.auth.repo.RefreshTokenRepository;
 import com.intuit.taxrefund.auth.repo.UserRepository;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -21,6 +23,8 @@ import java.util.UUID;
 
 @Service
 public class AuthService {
+    private static final Logger log = LogManager.getLogger(AuthService.class);
+
     private final UserRepository userRepo;
     private final RefreshTokenRepository refreshRepo;
     private final PasswordPolicy passwordPolicy;
@@ -41,97 +45,109 @@ public class AuthService {
         this.passwordPolicy = passwordPolicy;
         this.jwtService = jwtService;
         this.refreshTokenDays = refreshTokenDays;
+
+        log.info("auth_service_initialized refreshTokenDays={}", refreshTokenDays);
     }
 
     public AppUser register(RegisterRequest request) {
         String email = request.email().trim().toLowerCase();
         if (this.userRepo.existsByEmailIgnoreCase(email)) {
+            log.warn("register_email_exists email={}", maskEmail(email));
             throw new IllegalArgumentException("Email already registered");
         }
 
         String password = request.password();
         passwordPolicy.validate(password);
+
         String encodedPassword = passwordEncoder.encode(password);
-
-        String firstName = request.firstName().trim();
-        String lastName = request.lastName().trim();
-
-        String address = request.address();
-        if (address != null) {
-            address = address.trim();
-            if (address.isBlank()) address = null;
-        }
-
-        String city = request.city().trim();
-        String state = request.state().trim().toUpperCase(); // keep consistent in DB
-        String phone = request.phone().trim();
 
         AppUser user = new AppUser(
             email,
             encodedPassword,
-            firstName,
-            lastName,
-            address,     // optional
-            city,
-            state,
-            phone,
-            Role.USER    // ✅ role is server-controlled / read-only
+            request.firstName().trim(),
+            request.lastName().trim(),
+            normalizeOptional(request.address()),
+            request.city().trim(),
+            request.state().trim().toUpperCase(),
+            request.phone().trim(),
+            Role.USER
         );
 
-        return userRepo.save(user);
+        AppUser saved = userRepo.save(user);
+        log.info("register_success userId={} email={}", saved.getId(), maskEmail(saved.getEmail()));
+        return saved;
     }
 
     public AuthTokens login(LoginRequest request) {
         AppUser user = userRepo.findByEmailIgnoreCase(request.email())
-            .orElseThrow(() -> new IllegalArgumentException("Bad credentials"));
+            .orElseThrow(() -> {
+                log.warn("login_bad_credentials email={}", maskEmail(request.email()));
+                return new IllegalArgumentException("Bad credentials");
+            });
 
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
+            log.warn("login_bad_credentials userId={} email={}", user.getId(), maskEmail(user.getEmail()));
             throw new IllegalArgumentException("Bad credentials");
         }
 
-        return issueTokens(user, true);
+        AuthTokens tokens = issueTokens(user, true);
+        log.info("login_issued_tokens userId={} role={}", user.getId(), user.getRole());
+        return tokens;
     }
 
     public void logout(String refreshCookie) {
-        if (refreshCookie == null || refreshCookie.isBlank()) return;
+        if (refreshCookie == null || refreshCookie.isBlank()) {
+            log.debug("logout_no_cookie");
+            return;
+        }
 
         try {
             ParseRefreshToken parsed = ParseRefreshToken.parse(refreshCookie);
             this.refreshRepo.findByJti(parsed.jti()).ifPresent(rt -> {
                 rt.revoke();
                 this.refreshRepo.save(rt);
+                log.info("logout_revoked_refresh jti={}", parsed.jti());
             });
         } catch (Exception e) {
-            // do nothing
+            log.warn("logout_parse_failed err={}", e.toString());
         }
     }
 
     public AuthTokens refresh(String refreshCookie) {
         ParseRefreshToken parsed = ParseRefreshToken.parse(refreshCookie);
+
         RefreshToken stored = refreshRepo.findByJti(parsed.jti())
-            .orElseThrow(() -> new IllegalArgumentException("Invalid refresh token"));
+            .orElseThrow(() -> {
+                log.warn("refresh_invalid_jti jti={}", parsed.jti());
+                return new IllegalArgumentException("Invalid refresh token");
+            });
 
         if (stored.isRevoked() || stored.getExpiresAt().isBefore(Instant.now())) {
+            log.warn("refresh_revoked_or_expired jti={} revoked={} expiresAt={}",
+                parsed.jti(), stored.isRevoked(), stored.getExpiresAt());
             throw new IllegalArgumentException("Refresh token revoked or expired");
         }
 
+        // Rotate
         stored.revoke();
         refreshRepo.save(stored);
 
         String refreshInputHash = sha256Base64(refreshCookie);
         if (!refreshInputHash.equals(stored.getTokenHash())) {
+            log.warn("refresh_hash_mismatch jti={}", parsed.jti());
             throw new IllegalArgumentException("Invalid refresh token");
         }
 
-        return issueTokens(stored.getUser(), true);
+        AuthTokens tokens = issueTokens(stored.getUser(), true);
+        log.info("refresh_success userId={} rotated=true", stored.getUser().getId());
+        return tokens;
     }
 
     public record AuthTokens(
         String accessToken,
         String refreshToken,
         Duration refreshMaxAge
-    ) {
-    }
+    ) {}
 
     private AuthTokens issueTokens(AppUser user, boolean issueRefresh) {
         String accessToken = jwtService.createAccessToken(user.getId(), user.getEmail(), user.getRole().name());
@@ -145,8 +161,9 @@ public class AuthService {
         Duration refreshDuration = Duration.ofDays(refreshTokenDays);
         Instant exp = Instant.now().plus(refreshDuration);
 
-        RefreshToken refreshToken = refreshRepo.save(new RefreshToken(user, refreshHash, jti, exp));
+        refreshRepo.save(new RefreshToken(user, refreshHash, jti, exp));
 
+        log.debug("refresh_token_issued userId={} jti={} exp={}", user.getId(), jti, exp);
         return new AuthTokens(accessToken, rawRefresh, refreshDuration);
     }
 
@@ -174,5 +191,19 @@ public class AuthService {
 
             return new ParseRefreshToken(token, jti);
         }
+    }
+
+    private static String normalizeOptional(String s) {
+        if (s == null) return null;
+        String t = s.trim();
+        return t.isBlank() ? null : t;
+    }
+
+    private static String maskEmail(String email) {
+        if (email == null) return "null";
+        String e = email.trim().toLowerCase();
+        int at = e.indexOf('@');
+        if (at <= 1) return "***";
+        return e.substring(0, 1) + "***" + e.substring(at);
     }
 }

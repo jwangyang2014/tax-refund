@@ -10,14 +10,17 @@ import com.intuit.taxrefund.openai.OpenAiResponsesClient;
 import com.intuit.taxrefund.refund.api.dto.RefundStatusResponse;
 import com.intuit.taxrefund.refund.model.RefundStatus;
 import com.intuit.taxrefund.refund.service.RefundService;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.springframework.stereotype.Service;
 
-import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 
 @Service
 public class AssistantService {
+
+    private static final Logger log = LogManager.getLogger(AssistantService.class);
 
     private final RefundService refundService;
     private final IntentClassifier classifier;
@@ -54,21 +57,22 @@ public class AssistantService {
         RefundStatusResponse refund = refundService.getLatestRefundStatus(principal);
         AssistantPlan plan = planner.plan(prev, intent, refund.status());
 
-        // Build citations/policies
-        var citations = plan.includePolicySnippets() ? policySnippets.forStatus(refund.status()) : List.<AssistantChatResponse.Citation>of();
+        log.info("assistant_plan userId={} intent={} refundStatus={} nextState={}",
+            userId, intent, refund.status(), plan.nextState());
 
-        // Build actions
+        var citations = plan.includePolicySnippets()
+            ? policySnippets.forStatus(refund.status())
+            : List.<AssistantChatResponse.Citation>of();
+
         var actions = buildActions(refund);
 
-        // Persist next conversation state
         stateStore.set(userId, plan.nextState());
 
-        // If OpenAI is not configured, return deterministic mock
         if (!openai.isEnabled()) {
+            log.debug("assistant_openai_disabled userId={}", userId);
             return mockAnswer(question, refund, citations, actions);
         }
 
-        // Authoritative data the model is allowed to use
         Map<String, Object> authoritativeData = new LinkedHashMap<>();
         authoritativeData.put("refund", Map.of(
             "taxYear", refund.taxYear(),
@@ -82,7 +86,6 @@ public class AssistantService {
         ));
         authoritativeData.put("policies", citations);
 
-        // JSON schema for structured outputs (strict)
         Map<String, Object> schema = responseSchema();
 
         String developerPrompt = """
@@ -99,15 +102,27 @@ authoritativeData:
 %s
 """.formatted(question, safeJson(authoritativeData));
 
-        String json = openai.generateStructuredJson(developerPrompt, userPrompt, schema);
-
-        // Validate + parse
-        AssistantChatResponse parsed = parseStrict(json);
-
-        // If model returns empty/invalid -> reject (and safe fallback)
-        if (parsed.answerMarkdown() == null || parsed.answerMarkdown().isBlank()) {
+        String json;
+        try {
+            json = openai.generateStructuredJson(developerPrompt, userPrompt, schema);
+        } catch (Exception e) {
+            log.error("assistant_openai_call_failed userId={} err={}", userId, e.toString());
             return mockAnswer(question, refund, citations, actions);
         }
+
+        AssistantChatResponse parsed;
+        try {
+            parsed = parseStrict(json);
+        } catch (Exception e) {
+            log.warn("assistant_openai_bad_output userId={} err={}", userId, e.toString());
+            return mockAnswer(question, refund, citations, actions);
+        }
+
+        if (parsed.answerMarkdown() == null || parsed.answerMarkdown().isBlank()) {
+            log.warn("assistant_openai_empty_answer userId={}", userId);
+            return mockAnswer(question, refund, citations, actions);
+        }
+
         return parsed;
     }
 
@@ -115,7 +130,6 @@ authoritativeData:
         try {
             return om.readValue(json, AssistantChatResponse.class);
         } catch (Exception e) {
-            // reject invalid output
             throw new IllegalArgumentException("LLM output failed schema/parse: " + e.getMessage());
         }
     }
@@ -164,8 +178,6 @@ authoritativeData:
     }
 
     private Map<String, Object> responseSchema() {
-        // JSON Schema object for Structured Outputs (strict)
-        // docs: Structured Outputs guide :contentReference[oaicite:2]{index=2}
         Map<String, Object> schema = new LinkedHashMap<>();
         schema.put("name", "assistant_response");
         schema.put("strict", true);

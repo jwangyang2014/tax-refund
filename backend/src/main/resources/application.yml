@@ -1,54 +1,85 @@
 server:
   port: 8080
-
-logging:
-  level:
-    org.springframework.security: INFO
+  shutdown: graceful
+  forward-headers-strategy: framework
 
 spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 10s
+
   data:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       database: 0
+
   datasource:
     url: ${POSTGRES_DB_URL:jdbc:postgresql://localhost:5432/taxrefund}
     username: ${POSTGRES_DB_USERNAME:postgres}
     password: ${POSTGRES_DB_PASSWORD:postgres}
+
   jpa:
     hibernate:
       ddl-auto: validate
     properties:
       hibernate:
         format_sql: true
+
   flyway:
     enabled: true
 
 ml:
   baseUrl: ${ML_BASE_URL:http://localhost:8000}
 
-# health check end points /actuator/health/liveness, /actuator/health/readiness
+# --- Actuator / Monitoring ---
 management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,metrics,prometheus,loggers,threaddump
   endpoint:
     health:
       probes:
         enabled: true
+      show-details: when_authorized
   health:
     livenessState:
       enabled: true
     readinessState:
       enabled: true
 
+  metrics:
+    tags:
+      service: ${APP_SERVICE_NAME:tax-refund-status}
+      env: ${APP_ENV:local}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      percentiles:
+        http.server.requests: 0.5,0.9,0.95,0.99
+    enable:
+      jvm: true
+      process: true
+      system: true
+
+  tracing:
+    enabled: true
+    sampling:
+      probability: ${TRACING_SAMPLE_PROBABILITY:0.1}
+
+# --- Logging levels (actual format is in log4j2-spring.xml) ---
+logging:
+  level:
+    root: INFO
+    org.springframework.security: INFO
+    com.intuit.taxrefund: INFO
+
 app:
   ratelimit:
     enabled: true
     refundLatest:
-      capacity: 30          # burst tokens
-      refillPerMinute: 30   # steady rate
+      capacity: 30
+      refillPerMinute: 30
     assistantChat:
       capacity: 10
       refillPerMinute: 10
@@ -61,7 +92,7 @@ app:
       refreshTokenDays: 14
     cookies:
       refreshName: refresh_token
-      secure: false # true in prod (https)
+      secure: false
       sameSite: Lax
 
 ai:

@@ -5,6 +5,8 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -15,6 +17,8 @@ import java.io.IOException;
 
 @Component
 public class RateLimitFilter extends OncePerRequestFilter {
+
+    private static final Logger log = LogManager.getLogger(RateLimitFilter.class);
 
     private final RedisRateLimiter limiter;
     private final RateLimitProps props;
@@ -36,16 +40,12 @@ public class RateLimitFilter extends OncePerRequestFilter {
         String path = req.getRequestURI();
         String method = req.getMethod();
 
-        // Normalize trailing slash to avoid /x vs /x/ mismatches
         if (path.length() > 1 && path.endsWith("/")) {
             path = path.substring(0, path.length() - 1);
         }
-        // ✅ DEBUG: confirms filter runs and shows the exact path/method seen by the filter
-        System.out.println("RateLimitFilter: " + method + " " + path);
 
         RateLimitProps.Policy policy = null;
         if ("GET".equals(method) && "/api/refund/latest".equals(path)) policy = props.refundLatest();
-        if ("POST".equals(method) && "/api/assistant/chat".equals(path)) policy = props.assistantChat();
         if ("POST".equals(method) && "/api/assistant/chat".equals(path)) policy = props.assistantChat();
 
         if (policy == null) {
@@ -53,8 +53,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
             return;
         }
 
-        String principal = "anon";
-
+        String principal;
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth != null && auth.isAuthenticated() && auth.getPrincipal() instanceof JwtService.JwtPrincipal p) {
             principal = "u:" + p.userId();
@@ -66,6 +65,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
         var r = limiter.tryConsume(key, policy.capacity(), policy.refillPerMinute(), 1);
         if (!r.allowed()) {
+            log.warn("rate_limited principal={} method={} path={}", principal, method, path);
+
             res.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
             res.setHeader("Retry-After", "10");
             res.setContentType("application/json");

@@ -7,6 +7,8 @@ import com.intuit.taxrefund.refund.service.IrsAdapter;
 import com.intuit.taxrefund.refund.service.MockIrsAdapter;
 import com.intuit.taxrefund.refund.service.RefundService;
 import jakarta.validation.Valid;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -14,6 +16,8 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/refund")
 public class RefundController {
+    private static final Logger log = LogManager.getLogger(RefundController.class);
+
     private final RefundService refundService;
     private final MockIrsAdapter mockIrs;
     private final StringRedisTemplate redis;
@@ -27,13 +31,16 @@ public class RefundController {
     @GetMapping("/latest")
     public RefundStatusResponse latest(Authentication auth) {
         JwtService.JwtPrincipal principal = (JwtService.JwtPrincipal) auth.getPrincipal();
-        return refundService.getLatestRefundStatus(principal);
+        RefundStatusResponse resp = refundService.getLatestRefundStatus(principal);
+        log.info("refund_latest_served userId={} taxYear={} status={}",
+            principal.userId(), resp.taxYear(), resp.status());
+        return resp;
     }
 
-    // Demo/testing endpoint to trigger a status change in the mock IRS adapter
     @PostMapping("/simulate")
     public void simulate(Authentication auth, @Valid @RequestBody RefundStatusInternalUpdateRequest req) {
         JwtService.JwtPrincipal principal = (JwtService.JwtPrincipal) auth.getPrincipal();
+
         mockIrs.upsert(
             principal.userId(),
             new IrsAdapter.IrsRefundResult(
@@ -41,7 +48,13 @@ public class RefundController {
             )
         );
 
-        // invalidate cached /latest response so UI sees change immediately
-        redis.delete("refund:latest:" + principal.userId());
+        try {
+            redis.delete("refund:latest:" + principal.userId());
+        } catch (Exception e) {
+            log.warn("refund_simulate_cache_invalidate_failed userId={} err={}", principal.userId(), e.toString());
+        }
+
+        log.info("refund_simulated userId={} taxYear={} status={}",
+            principal.userId(), req.taxYear(), req.statusEnum());
     }
 }
