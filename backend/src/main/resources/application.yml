@@ -75,6 +75,8 @@ logging:
     com.intuit.taxrefund: INFO
 
 app:
+  demo:
+    enabled: true
   assistant:
     intentClassifier: opennlp   # opennlp | keyword
     intentMinConfidence: 0.55

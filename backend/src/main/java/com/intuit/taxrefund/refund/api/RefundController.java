@@ -1,6 +1,7 @@
 package com.intuit.taxrefund.refund.api;
 
 import com.intuit.taxrefund.auth.jwt.JwtService;
+import com.intuit.taxrefund.config.DemoProps;
 import com.intuit.taxrefund.refund.api.dto.RefundStatusInternalUpdateRequest;
 import com.intuit.taxrefund.refund.api.dto.RefundStatusResponse;
 import com.intuit.taxrefund.refund.service.IrsAdapter;
@@ -10,8 +11,10 @@ import jakarta.validation.Valid;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/refund")
@@ -21,24 +24,40 @@ public class RefundController {
     private final RefundService refundService;
     private final MockIrsAdapter mockIrs;
     private final StringRedisTemplate redis;
+    private final DemoProps demoProps;
 
-    public RefundController(RefundService refundService, MockIrsAdapter mockIrs, StringRedisTemplate redis) {
+    public RefundController(
+        RefundService refundService,
+        MockIrsAdapter mockIrs,
+        StringRedisTemplate redis,
+        DemoProps demoProps
+    ) {
         this.refundService = refundService;
         this.mockIrs = mockIrs;
         this.redis = redis;
+        this.demoProps = demoProps;
     }
 
     @GetMapping("/latest")
-    public RefundStatusResponse latest(Authentication auth) {
+    public RefundStatusResponse latest(
+        Authentication auth,
+        @RequestHeader(value = "X-Correlation-Id", required = false) String correlationId
+    ) {
         JwtService.JwtPrincipal principal = (JwtService.JwtPrincipal) auth.getPrincipal();
-        RefundStatusResponse resp = refundService.getLatestRefundStatus(principal);
-        log.info("refund_latest_served userId={} taxYear={} status={}",
-            principal.userId(), resp.taxYear(), resp.status());
+        RefundStatusResponse resp = refundService.getLatestRefundStatus(principal, correlationId);
+
+        log.info("refund_latest_served userId={} taxYear={} status={} corrId={}",
+            principal.userId(), resp.taxYear(), resp.status(), correlationId);
+
         return resp;
     }
 
     @PostMapping("/simulate")
     public void simulate(Authentication auth, @Valid @RequestBody RefundStatusInternalUpdateRequest req) {
+        if (!demoProps.enabled()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        }
+
         JwtService.JwtPrincipal principal = (JwtService.JwtPrincipal) auth.getPrincipal();
 
         mockIrs.upsert(

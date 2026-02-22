@@ -168,3 +168,15 @@ docker compose logs -n 200 ml
 # Stop
 docker-compose down ml
 ```
+
+# Open AI test
+```bash
+curl https://api.openai.com/v1/responses \
+  -H "Authorization: Bearer $OPENAI_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4.1-mini",
+    "input": "Return JSON with fields: title, steps[], risks[]. Topic: tax refund status demo."
+  }'
+```
+

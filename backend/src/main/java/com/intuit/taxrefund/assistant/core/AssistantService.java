@@ -14,7 +14,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.stereotype.Service;
 
-import java.time.Instant;
 import java.util.*;
 
 @Service
@@ -23,6 +22,7 @@ public class AssistantService {
     private static final Logger log = LogManager.getLogger(AssistantService.class);
 
     private final RefundService refundService;
+    private final PrivacyFilter privacyFilter;
     private final IntentClassifier classifier;
     private final AssistantPlanner planner;
     private final ConversationStateStore stateStore;
@@ -32,6 +32,7 @@ public class AssistantService {
 
     public AssistantService(
         RefundService refundService,
+        PrivacyFilter privacyFilter,
         IntentClassifier classifier,
         AssistantPlanner planner,
         ConversationStateStore stateStore,
@@ -40,6 +41,7 @@ public class AssistantService {
         ObjectMapper om
     ) {
         this.refundService = refundService;
+        this.privacyFilter = privacyFilter;
         this.classifier = classifier;
         this.planner = planner;
         this.stateStore = stateStore;
@@ -58,7 +60,8 @@ public class AssistantService {
         log.info("assistant_intent userId={} intent={} confidence={} model={}",
             userId, r.intent(), r.confidence(), r.model());
 
-        RefundStatusResponse refund = refundService.getLatestRefundStatus(principal);
+        // For assistant calls, no correlationId needed; pass null
+        RefundStatusResponse refund = refundService.getLatestRefundStatus(principal, null);
         AssistantPlan plan = planner.plan(prev, intent, refund.status());
 
         log.info("assistant_plan userId={} intent={} refundStatus={} nextState={}",
@@ -77,25 +80,17 @@ public class AssistantService {
             return mockAnswer(question, refund, citations, actions);
         }
 
-        Map<String, Object> authoritativeData = new LinkedHashMap<>();
-        authoritativeData.put("refund", Map.of(
-            "taxYear", refund.taxYear(),
-            "status", refund.status(),
-            "lastUpdatedAt", refund.lastUpdatedAt(),
-            "expectedAmount", refund.expectedAmount(),
-            "trackingId", refund.trackingId()
-        ));
-        authoritativeData.put("eta", Map.of(
-            "estimatedAvailableAt", refund.availableAtEstimated()
-        ));
+        // Privacy-safe authoritative data for LLM
+        Map<String, Object> authoritativeData = privacyFilter.buildAuthoritativeDataForLlm(refund);
         authoritativeData.put("policies", citations);
 
         Map<String, Object> schema = responseSchema();
 
         String developerPrompt = """
-You are a TurboTax-like assistant. You must obey:
-- Only use numeric/date facts from authoritativeData. Do NOT invent numbers or dates.
-- If a needed fact is missing, say it's unknown.
+You are a TurboTax-like assistant. STRICT RULES:
+- Only use facts (numbers/dates/status) present in authoritativeData. Do NOT invent.
+- Do NOT request or reveal PII (SSN, bank account, address, full name).
+- Do NOT mention tracking IDs.
 - Return ONLY JSON that matches the provided schema.
 """;
 
