@@ -7,6 +7,10 @@ spring:
   lifecycle:
     timeout-per-shutdown-phase: 10s
 
+  autoconfigure:
+    exclude: # prevent auto creation of in-memory user
+      - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -19,6 +23,7 @@ spring:
     password: ${POSTGRES_DB_PASSWORD:postgres}
 
   jpa:
+    open-in-view: false # disable to prevent lazy loading outside of transactions (for better performance and to avoid common pitfalls)
     hibernate:
       ddl-auto: validate
     properties:
@@ -80,6 +85,10 @@ app:
   assistant:
     intentClassifier: opennlp   # opennlp | keyword
     intentMinConfidence: 0.55
+    # hard cap to prevent prompt abuse + accidental huge cost
+    maxQuestionChars: 500
+    # daily per-user quota for OpenAI calls (in addition to rate limit filter)
+    dailyOpenAiCallsPerUser: 30
   ratelimit:
     enabled: true
     refundLatest:
@@ -97,8 +106,8 @@ app:
       refreshTokenDays: 14
     cookies:
       refreshName: refresh_token
-      secure: false
-      sameSite: Lax
+      secure: false # set to true (https only) for production
+      sameSite: Lax # important since we disabled CSRF
 
 ai:
   provider: ${AI_PROVIDER:mock}   # mock | openai

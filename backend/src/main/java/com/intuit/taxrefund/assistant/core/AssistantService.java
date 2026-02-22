@@ -24,6 +24,8 @@ public class AssistantService {
     private final RefundService refundService;
     private final PrivacyFilter privacyFilter;
     private final IntentClassifier classifier;
+    private final AssistantProps props;
+    private final AssistantQuotaService quota;
     private final AssistantPlanner planner;
     private final ConversationStateStore stateStore;
     private final PolicySnippets policySnippets;
@@ -34,6 +36,8 @@ public class AssistantService {
         RefundService refundService,
         PrivacyFilter privacyFilter,
         IntentClassifier classifier,
+        AssistantProps props,
+        AssistantQuotaService quota,
         AssistantPlanner planner,
         ConversationStateStore stateStore,
         PolicySnippets policySnippets,
@@ -43,6 +47,8 @@ public class AssistantService {
         this.refundService = refundService;
         this.privacyFilter = privacyFilter;
         this.classifier = classifier;
+        this.props = props;
+        this.quota = quota;
         this.planner = planner;
         this.stateStore = stateStore;
         this.policySnippets = policySnippets;
@@ -77,6 +83,12 @@ public class AssistantService {
 
         if (!openai.isEnabled()) {
             log.debug("assistant_openai_disabled userId={}", userId);
+            return mockAnswer(question, refund, citations, actions);
+        }
+
+        // Daily quota for cost control
+        if (!quota.tryConsumeDaily(userId, props.dailyOpenAiCallsPerUser())) {
+            log.warn("assistant_quota_exceeded userId={}", userId);
             return mockAnswer(question, refund, citations, actions);
         }
 

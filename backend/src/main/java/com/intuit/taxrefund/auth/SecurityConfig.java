@@ -5,6 +5,7 @@ import com.intuit.taxrefund.api.ApiError;
 import com.intuit.taxrefund.auth.jwt.JwtAuthenticationFilter;
 import com.intuit.taxrefund.observability.RequestCorrelationFilter;
 import com.intuit.taxrefund.ratelimit.RateLimitFilter;
+import com.intuit.taxrefund.security.SecurityHeadersFilter;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -26,6 +27,7 @@ public class SecurityConfig {
     SecurityFilterChain securityFilterChain(
         HttpSecurity http,
         RequestCorrelationFilter requestCorrelationFilter,
+        SecurityHeadersFilter securityHeadersFilter,
         JwtAuthenticationFilter jwtAuthenticationFilter,
         RateLimitFilter rateLimitFilter,
         ObjectMapper objectMapper
@@ -54,6 +56,8 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/actuator/prometheus").permitAll()
                 .anyRequest().authenticated())
 
+            // enforce security headers on all responses, including error responses (put before auth filters)
+            .addFilterBefore(securityHeadersFilter, UsernamePasswordAuthenticationFilter.class)
             // JWT first (sets SecurityContext)
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
             // Correlation after JWT (can read userId reliably)
