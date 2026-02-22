@@ -101,9 +101,13 @@ authoritativeData:
 %s
 """.formatted(question, safeJson(authoritativeData));
 
+        log.info("assistant_openai_call_start userId={} intent={}",
+            userId, intent);
+
         String json;
         try {
             json = openai.generateStructuredJson(developerPrompt, userPrompt, schema);
+            log.info("assistant_openai_call_ok userId={} chars={}", userId, json == null ? 0 : json.length());
         } catch (Exception e) {
             log.error("assistant_openai_call_failed userId={} err={}", userId, e.toString());
             return mockAnswer(question, refund, citations, actions);
