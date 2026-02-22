@@ -3,6 +3,7 @@ package com.intuit.taxrefund.auth;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.intuit.taxrefund.api.ApiError;
 import com.intuit.taxrefund.auth.jwt.JwtAuthenticationFilter;
+import com.intuit.taxrefund.ratelimit.RateLimitFilter;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -24,6 +25,7 @@ public class SecurityConfig {
     SecurityFilterChain securityFilterChain(
             HttpSecurity http,
             JwtAuthenticationFilter jwtAuthenticationFilter,
+            RateLimitFilter rateLimitFilter,
             ObjectMapper objectMapper
     ) throws Exception {
 
@@ -48,7 +50,9 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/actuator/health").permitAll()
                 .anyRequest().authenticated())
 
-            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+            // Rate limit AFTER JWT so it can use userId; but still before controller execution
+            .addFilterAfter(rateLimitFilter, JwtAuthenticationFilter.class);
 
         return http.build();
     }

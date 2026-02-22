@@ -86,3 +86,63 @@ With port `5005`
 ./mvnw spring-boot:run \
   -Dspring-boot.run.jvmArguments='-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=localhost:5005'
 ```
+
+# Redis and rate limitter
+- Test `/api/refund/latest`
+```bash
+# replace with a real token if you call with Authorization header
+for i in {1..50}; do
+  curl -s -o /dev/null -w "%{http_code}\n" \
+    -H "Authorization: Bearer <ACCESS_TOKEN>" \
+    http://localhost:8080/api/refund/latest
+done
+```
+- Expected:
+  - First ~30 should be 200
+  - Then you’ll see 429
+- Verify Redis keys are created
+```bash
+docker compose exec redis redis-cli keys "rl:*"
+docker compose exec redis redis-cli hgetall "rl:u:123:GET:/api/refund/latest"
+```
+- Local postgres and redis service
+```bash
+# Find the process ID
+# Redis (default 6379)
+lsof -nP -iTCP:6379 -sTCP:LISTEN
+
+# Postgres (default 5432)
+lsof -nP -iTCP:5432 -sTCP:LISTEN
+
+# Also useful
+ps aux | egrep 'redis-server|postgres|postmaster' | grep -v egrep
+
+# List
+brew services list
+
+# Start/stop
+brew services start redis
+brew services stop redis
+brew services restart redis
+
+brew services start postgresql@16   # (or whatever version you have)
+brew services stop postgresql@16
+brew services restart postgresql@16
+
+# Homebrew uses launchd under the hood. Find exact LaunchAgent/Daemon entries:
+# For user-level services
+ls -la ~/Library/LaunchAgents | egrep 'homebrew|redis|postgres'
+
+# For system-level services (less common)
+sudo ls -la /Library/LaunchDaemons | egrep 'homebrew|redis|postgres'
+
+# And list loaded launchd jobs:
+launchctl list | egrep 'homebrew|redis|postgres'
+```
+- Useful redis commands
+```bash
+redis-cli info keyspace
+
+# List keys
+redis-cli --scan
+```

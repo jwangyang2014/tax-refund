@@ -1,5 +1,6 @@
 package com.intuit.taxrefund.refund.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.intuit.taxrefund.ai.AiConfig;
 import com.intuit.taxrefund.ai.model.AiRequestLog;
 import com.intuit.taxrefund.ai.repo.AiRequestLogRepository;
@@ -13,8 +14,10 @@ import com.intuit.taxrefund.refund.model.RefundRecord;
 import com.intuit.taxrefund.refund.model.RefundStatus;
 import com.intuit.taxrefund.refund.repo.RefundRecordRepository;
 import jakarta.transaction.Transactional;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.time.Instant;
 
 @Service
@@ -27,6 +30,8 @@ public class RefundService {
     private final AiRequestLogRepository aiLogRepo;
     private final AiConfig aiConfig;
     private final AiClient aiClient;
+    private final StringRedisTemplate redis;
+    private final ObjectMapper objectMapper;
 
     public RefundService(
         RefundRecordRepository refundRepo,
@@ -34,7 +39,9 @@ public class RefundService {
         IrsAdapter irs,
         AiClientRouter aiClientRouter,
         AiRequestLogRepository aiLogRepo,
-        AiConfig aiConfig
+        AiConfig aiConfig,
+        StringRedisTemplate redis,
+        ObjectMapper objectMapper
     ) {
         this.refundRepo = refundRepo;
         this.userRepo = userRepo;
@@ -43,11 +50,23 @@ public class RefundService {
         this.aiConfig = aiConfig;
 
         this.aiClient = aiClientRouter.getClient();
+        this.redis = redis;
+        this.objectMapper = objectMapper;
     }
 
     @Transactional
     public RefundStatusResponse getLatestRefundStatus(JwtService.JwtPrincipal principal) {
         Long userId = principal.userId();
+
+        String cacheKey = "refund:latest:" + userId;
+        String cached = redis.opsForValue().get(cacheKey);
+        if (cached != null) {
+            try {
+                return objectMapper.readValue(cached, RefundStatusResponse.class);
+            } catch (Exception ignore) {
+                // cache corruption / schema change -> ignore cache
+            }
+        }
 
         IrsAdapter.IrsRefundResult irsResult = irs.fetchMostRecentRefund(userId);
         RefundRecord record = refundRepo.findByUserIdAndTaxYear(userId, irsResult.taxYear())
@@ -83,7 +102,7 @@ public class RefundService {
 
         refundRepo.save(record);
 
-        return new RefundStatusResponse(
+        RefundStatusResponse resp = new RefundStatusResponse(
             record.getTaxYear(),
             record.getStatus().name(),
             record.getLastUpdatedAt(),
@@ -92,6 +111,15 @@ public class RefundService {
             record.getAvailableAtEstimated(),
             aiExplanation
         );
+
+        // Cache the result
+        try {
+            redis.opsForValue().set(cacheKey, objectMapper.writeValueAsString(resp), Duration.ofSeconds(60));
+        } catch (Exception ignore) {
+            // if Redis/json fails, still return response
+        }
+
+        return resp;
     }
 
     private void logAiRequest(AppUser user, String input, boolean success, String output) {

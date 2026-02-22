@@ -1,16 +1,16 @@
 server:
   port: 8080
 
-data:
-  redis:
-    host: redis
-    port: 6379
-
 logging:
   level:
-    org.springframework.security: DEBUG
+    org.springframework.security: INFO
 
 spring:
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      database: 0
   datasource:
     url: ${POSTGRES_DB_URL:jdbc:postgresql://localhost:5432/refund}
     username: ${POSTGRES_DB_USERNAME:postgres}

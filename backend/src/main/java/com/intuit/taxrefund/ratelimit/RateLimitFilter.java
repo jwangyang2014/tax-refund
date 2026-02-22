@@ -36,10 +36,16 @@ public class RateLimitFilter extends OncePerRequestFilter {
         String path = req.getRequestURI();
         String method = req.getMethod();
 
-        // Only enforce on selected endpoints
+        // Normalize trailing slash to avoid /x vs /x/ mismatches
+        if (path.length() > 1 && path.endsWith("/")) {
+            path = path.substring(0, path.length() - 1);
+        }
+        // ✅ DEBUG: confirms filter runs and shows the exact path/method seen by the filter
+        System.out.println("RateLimitFilter: " + method + " " + path);
+
         RateLimitProps.Policy policy = null;
-        if (method.equals("GET") && path.equals("/api/refund/latest")) policy = props.refundLatest();
-        if (method.equals("POST") && path.equals("/api/assistant/chat")) policy = props.assistantChat();
+        if ("GET".equals(method) && "/api/refund/latest".equals(path)) policy = props.refundLatest();
+        if ("POST".equals(method) && "/api/assistant/chat".equals(path)) policy = props.assistantChat();
 
         if (policy == null) {
             chain.doFilter(req, res);
