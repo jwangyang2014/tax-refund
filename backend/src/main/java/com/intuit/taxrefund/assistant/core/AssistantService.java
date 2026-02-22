@@ -121,9 +121,30 @@ authoritativeData:
             return mockAnswer(question, refund, citations, actions);
         }
 
-        if (parsed.answerMarkdown() == null || parsed.answerMarkdown().isBlank()) {
-            log.warn("assistant_openai_empty_answer userId={}", userId);
+        if (parsed == null) {
             return mockAnswer(question, refund, citations, actions);
+        }
+
+        // If parsed answerMarkdown is blank for any reason, use the raw JSON field.
+        if (parsed.answerMarkdown() == null || parsed.answerMarkdown().isBlank()) {
+            try {
+                String rawAnswer = om.readTree(json).path("answerMarkdown").asText("");
+                if (!rawAnswer.isBlank()) {
+                    parsed = new AssistantChatResponse(
+                        rawAnswer,
+                        parsed.citations() == null ? List.of() : parsed.citations(),
+                        parsed.actions() == null ? actions : parsed.actions(),
+                        parsed.confidence() == null ? Confidence.MEDIUM : parsed.confidence()
+                    );
+                } else {
+                    return mockAnswer(question, refund, citations, actions);
+                }
+            } catch (Exception e) {
+                // This means JSON was valid enough to parse, but our "answerMarkdown recovery" failed.
+                log.warn("assistant_openai_answer_recovery_failed userId={} errType={} err={}",
+                    userId, e.getClass().getSimpleName(), e.toString());
+                return mockAnswer(question, refund, citations, actions);
+            }
         }
 
         return parsed;
