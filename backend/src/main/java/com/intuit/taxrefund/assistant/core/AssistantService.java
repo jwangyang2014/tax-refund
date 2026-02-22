@@ -52,7 +52,11 @@ public class AssistantService {
         long userId = principal.userId();
 
         ConversationState prev = stateStore.get(userId);
-        AssistantIntent intent = classifier.classify(question);
+        IntentClassifier.IntentResult r = classifier.classify(question);
+        AssistantIntent intent = r.intent();
+
+        log.info("assistant_intent userId={} intent={} confidence={} model={}",
+            userId, r.intent(), r.confidence(), r.model());
 
         RefundStatusResponse refund = refundService.getLatestRefundStatus(principal);
         AssistantPlan plan = planner.plan(prev, intent, refund.status());
