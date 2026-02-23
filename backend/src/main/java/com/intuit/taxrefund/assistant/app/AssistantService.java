@@ -5,14 +5,17 @@ import com.intuit.taxrefund.assistant.api.dto.AssistantChatResponse;
 import com.intuit.taxrefund.assistant.api.dto.AssistantChatResponse.Action;
 import com.intuit.taxrefund.assistant.api.dto.AssistantChatResponse.ActionType;
 import com.intuit.taxrefund.assistant.api.dto.AssistantChatResponse.Confidence;
-import com.intuit.taxrefund.assistant.model.*;
 import com.intuit.taxrefund.assistant.infra.AssistantProps;
 import com.intuit.taxrefund.assistant.infra.AssistantQuotaService;
 import com.intuit.taxrefund.assistant.infra.ConversationStateStore;
 import com.intuit.taxrefund.assistant.infra.PrivacyFilter;
+import com.intuit.taxrefund.assistant.model.*;
 import com.intuit.taxrefund.assistant.nlp.IntentClassifier;
 import com.intuit.taxrefund.auth.jwt.JwtService;
-import com.intuit.taxrefund.integration.openai.OpenAiResponsesClient;
+import com.intuit.taxrefund.llm.AiProvider;
+import com.intuit.taxrefund.llm.LlmClient;
+import com.intuit.taxrefund.llm.LlmClientRouter;
+import com.intuit.taxrefund.llm.MockLlmClient;
 import com.intuit.taxrefund.refund.api.dto.RefundStatusResponse;
 import com.intuit.taxrefund.refund.model.RefundStatus;
 import com.intuit.taxrefund.refund.app.RefundService;
@@ -35,7 +38,9 @@ public class AssistantService {
     private final AssistantPlanner planner;
     private final ConversationStateStore stateStore;
     private final PolicySnippets policySnippets;
-    private final OpenAiResponsesClient openai;
+
+    private final LlmClientRouter llmRouter;
+    private final MockLlmClient mockLlm; // used for richer mock fallback (optional)
     private final ObjectMapper om;
 
     public AssistantService(
@@ -47,7 +52,8 @@ public class AssistantService {
         AssistantPlanner planner,
         ConversationStateStore stateStore,
         PolicySnippets policySnippets,
-        OpenAiResponsesClient openai,
+        LlmClientRouter llmRouter,
+        MockLlmClient mockLlm,
         ObjectMapper om
     ) {
         this.refundService = refundService;
@@ -58,7 +64,8 @@ public class AssistantService {
         this.planner = planner;
         this.stateStore = stateStore;
         this.policySnippets = policySnippets;
-        this.openai = openai;
+        this.llmRouter = llmRouter;
+        this.mockLlm = mockLlm;
         this.om = om;
     }
 
@@ -87,18 +94,7 @@ public class AssistantService {
 
         stateStore.set(userId, plan.nextState());
 
-        if (!openai.isEnabled()) {
-            log.debug("assistant_openai_disabled userId={}", userId);
-            return mockAnswer(question, refund, citations, actions);
-        }
-
-        // Daily quota for cost control
-        if (!quota.tryConsumeDaily(userId, props.dailyOpenAiCallsPerUser())) {
-            log.warn("assistant_quota_exceeded userId={}", userId);
-            return mockAnswer(question, refund, citations, actions);
-        }
-
-        // Privacy-safe authoritative data for LLM
+        // Build authoritative data for LLM / mock fallback
         Map<String, Object> authoritativeData = privacyFilter.buildAuthoritativeDataForLlm(refund);
         authoritativeData.put("policies", citations);
 
@@ -119,28 +115,51 @@ authoritativeData:
 %s
 """.formatted(question, safeJson(authoritativeData));
 
-        log.info("assistant_openai_call_start userId={} intent={}",
-            userId, intent);
+        // Decide primary provider from configuration
+        LlmClient primary = llmRouter.primary();
+        AiProvider provider = AiProvider.from(primary.provider()); // works for mock/openai/gemini naming if you keep them aligned
+
+        log.info("assistant_llm_primary userId={} provider={} model={} available={}",
+            userId, primary.provider(), primary.model(), primary.isAvailable());
+
+        // If primary is not available, skip quota and fall back to mock immediately
+        if (!primary.isAvailable() || "mock".equalsIgnoreCase(primary.provider())) {
+            return mockLlm.buildMockAssistantResponse(question, refund, citations, actions);
+        }
+
+        // Daily quota for cost control (only for real providers)
+        if (!quota.tryConsumeDaily(userId, props.dailyOpenAiCallsPerUser())) {
+            log.warn("assistant_quota_exceeded userId={}", userId);
+            return mockLlm.buildMockAssistantResponse(question, refund, citations, actions);
+        }
 
         String json;
         try {
-            json = openai.generateStructuredJson(developerPrompt, userPrompt, schema);
-            log.info("assistant_openai_call_ok userId={} chars={}", userId, json == null ? 0 : json.length());
+            log.info("assistant_llm_call_start userId={} provider={} model={} intent={}",
+                userId, primary.provider(), primary.model(), intent);
+
+            // Router will fall back to mock JSON if primary throws
+            json = llmRouter.callWithFallback(developerPrompt, userPrompt, schema);
+
+            log.info("assistant_llm_call_ok userId={} provider={} chars={}",
+                userId, primary.provider(), json == null ? 0 : json.length());
         } catch (Exception e) {
-            log.error("assistant_openai_call_failed userId={} err={}", userId, e.toString());
-            return mockAnswer(question, refund, citations, actions);
+            log.error("assistant_llm_call_failed userId={} provider={} err={}",
+                userId, primary.provider(), e.toString());
+            return mockLlm.buildMockAssistantResponse(question, refund, citations, actions);
         }
 
         AssistantChatResponse parsed;
         try {
             parsed = parseStrict(json);
         } catch (Exception e) {
-            log.warn("assistant_openai_bad_output userId={} err={}", userId, e.toString());
-            return mockAnswer(question, refund, citations, actions);
+            log.warn("assistant_llm_bad_output userId={} provider={} err={}",
+                userId, primary.provider(), e.toString());
+            return mockLlm.buildMockAssistantResponse(question, refund, citations, actions);
         }
 
         if (parsed == null) {
-            return mockAnswer(question, refund, citations, actions);
+            return mockLlm.buildMockAssistantResponse(question, refund, citations, actions);
         }
 
         // If parsed answerMarkdown is blank for any reason, use the raw JSON field.
@@ -155,14 +174,23 @@ authoritativeData:
                         parsed.confidence() == null ? Confidence.MEDIUM : parsed.confidence()
                     );
                 } else {
-                    return mockAnswer(question, refund, citations, actions);
+                    return mockLlm.buildMockAssistantResponse(question, refund, citations, actions);
                 }
             } catch (Exception e) {
-                // This means JSON was valid enough to parse, but our "answerMarkdown recovery" failed.
-                log.warn("assistant_openai_answer_recovery_failed userId={} errType={} err={}",
+                log.warn("assistant_llm_answer_recovery_failed userId={} errType={} err={}",
                     userId, e.getClass().getSimpleName(), e.toString());
-                return mockAnswer(question, refund, citations, actions);
+                return mockLlm.buildMockAssistantResponse(question, refund, citations, actions);
             }
+        }
+
+        // If the LLM omitted actions, ensure UI still has defaults
+        if (parsed.actions() == null || parsed.actions().isEmpty()) {
+            parsed = new AssistantChatResponse(
+                parsed.answerMarkdown(),
+                parsed.citations() == null ? List.of() : parsed.citations(),
+                actions,
+                parsed.confidence() == null ? Confidence.MEDIUM : parsed.confidence()
+            );
         }
 
         return parsed;
@@ -174,28 +202,6 @@ authoritativeData:
         } catch (Exception e) {
             throw new IllegalArgumentException("LLM output failed schema/parse: " + e.getMessage());
         }
-    }
-
-    private AssistantChatResponse mockAnswer(
-        String question,
-        RefundStatusResponse refund,
-        List<AssistantChatResponse.Citation> citations,
-        List<Action> actions
-    ) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("**Your question:** ").append(question).append("\n\n")
-            .append("**Latest refund status:** ").append(refund.status()).append("\n")
-            .append("**Tax year:** ").append(refund.taxYear()).append("\n")
-            .append("**Last updated:** ").append(refund.lastUpdatedAt()).append("\n");
-
-        if (refund.availableAtEstimated() != null && !RefundStatus.AVAILABLE.name().equals(refund.status())) {
-            sb.append("**Estimated availability:** ").append(refund.availableAtEstimated()).append("\n");
-        }
-
-        Confidence c = refund.availableAtEstimated() != null ? Confidence.MEDIUM : Confidence.LOW;
-        if (RefundStatus.AVAILABLE.name().equals(refund.status())) c = Confidence.HIGH;
-
-        return new AssistantChatResponse(sb.toString(), citations, actions, c);
     }
 
     private static List<Action> buildActions(RefundStatusResponse refund) {

@@ -1,0 +1,110 @@
+import java.io.IOException;
+import java.nio.file.*;
+import java.util.*;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+/**
+ * Prints a directory tree for the current working directory, showing only files
+ * that match supported extensions.
+ *
+ * Defaults to Java only: {"java"}
+ * You can pass extensions as args (without dots), e.g.:
+ *   java FileTreeLister ts tsx java
+ *
+ * Example output:
+ * .
+ * ├── src
+ * │   ├── App.tsx
+ * │   └── Main.java
+ * └── test
+ *     └── FooTest.java
+ */
+public class FileTreeLister {
+
+  /** Supported file types (extensions) shown by default (no dot). */
+  public static final Set<String> DEFAULT_FILE_TYPES = Set.of("java");
+
+  /** If you want a hard-coded "supported list" to validate args against, put it here. */
+  public static final Set<String> SUPPORTED_FILE_TYPES =
+      Set.of("java", "ts", "tsx", "js", "jsx", "kt", "py", "go", "cs");
+
+  public static void main(String[] args) throws IOException {
+    Path root = Paths.get(".").toRealPath();
+
+    Set<String> activeTypes = parseTypes(args);
+
+    System.out.println(root.getFileName() == null ? root.toString() : root.getFileName().toString());
+    printTree(root, "", activeTypes);
+  }
+
+  private static Set<String> parseTypes(String[] args) {
+    if (args == null || args.length == 0) return DEFAULT_FILE_TYPES;
+
+    Set<String> requested = Arrays.stream(args)
+        .filter(Objects::nonNull)
+        .map(String::trim)
+        .filter(s -> !s.isEmpty())
+        .map(s -> s.startsWith(".") ? s.substring(1) : s)
+        .map(String::toLowerCase)
+        .collect(Collectors.toCollection(LinkedHashSet::new));
+
+    // Optional: validate against SUPPORTED_FILE_TYPES (ignore unknowns).
+    Set<String> active = requested.stream()
+        .filter(SUPPORTED_FILE_TYPES::contains)
+        .collect(Collectors.toCollection(LinkedHashSet::new));
+
+    // If all args were invalid, fall back to default.
+    return active.isEmpty() ? DEFAULT_FILE_TYPES : active;
+  }
+
+  private static void printTree(Path dir, String prefix, Set<String> types) throws IOException {
+    if (!Files.isDirectory(dir)) return;
+
+    List<Path> children;
+    try (Stream<Path> s = Files.list(dir)) {
+      children = s
+          .filter(p -> {
+            try {
+              if (Files.isDirectory(p)) return containsMatchingFiles(p, types);
+              return isMatchingFile(p, types);
+            } catch (IOException e) {
+              return false; // skip unreadable
+            }
+          })
+          .sorted(Comparator
+              .comparing((Path p) -> !Files.isDirectory(p)) // dirs first
+              .thenComparing(p -> p.getFileName().toString().toLowerCase()))
+          .collect(Collectors.toList());
+    }
+
+    for (int i = 0; i < children.size(); i++) {
+      Path child = children.get(i);
+      boolean last = (i == children.size() - 1);
+
+      System.out.println(prefix + (last ? "└── " : "├── ") + child.getFileName());
+
+      if (Files.isDirectory(child)) {
+        printTree(child, prefix + (last ? "    " : "│   "), types);
+      }
+    }
+  }
+
+  private static boolean isMatchingFile(Path p, Set<String> types) {
+    if (!Files.isRegularFile(p)) return false;
+    String ext = extensionOf(p.getFileName().toString());
+    return ext != null && types.contains(ext);
+  }
+
+  private static boolean containsMatchingFiles(Path dir, Set<String> types) throws IOException {
+    try (Stream<Path> s = Files.walk(dir)) {
+      return s.anyMatch(p -> isMatchingFile(p, types));
+    }
+  }
+
+  private static String extensionOf(String filename) {
+    int dot = filename.lastIndexOf('.');
+    if (dot < 0 || dot == filename.length() - 1) return null;
+    return filename.substring(dot + 1).toLowerCase();
+  }
+}
