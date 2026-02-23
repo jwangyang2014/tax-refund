@@ -29,7 +29,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @WebMvcTest(controllers = RefundController.class)
 @Import({SecurityConfig.class, JwtAuthenticationFilter.class})
-class RefundControllerSecurityWebMvcTest {
+class RefundControllerTest {
 
   @Autowired MockMvc mvc;
 

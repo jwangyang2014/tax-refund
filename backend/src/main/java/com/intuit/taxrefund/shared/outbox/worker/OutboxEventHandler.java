@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.intuit.taxrefund.refund.integration.eta.RefundEtaPrediction;
 import com.intuit.taxrefund.refund.integration.eta.RefundEtaPredictionRepository;
-import com.intuit.taxrefund.integration.ml.MlEtaClient;
+import com.intuit.taxrefund.ml.MlEtaClient;
 import com.intuit.taxrefund.shared.outbox.model.OutboxEvent;
 import org.springframework.stereotype.Component;
 

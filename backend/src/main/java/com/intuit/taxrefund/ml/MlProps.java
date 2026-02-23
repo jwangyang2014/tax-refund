@@ -1,4 +1,4 @@
-package com.intuit.taxrefund.integration.ml;
+package com.intuit.taxrefund.ml;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 

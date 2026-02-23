@@ -1,4 +1,4 @@
-package com.intuit.taxrefund.integration.ml;
+package com.intuit.taxrefund.ml;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;

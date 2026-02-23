@@ -28,7 +28,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(AuthController.class)
 @AutoConfigureMockMvc(addFilters = false) // keep it focused on controller behavior
 @Import(GlobalExceptionHandler.class)     // so 400 becomes JSON, not an exception
-class AuthControllerWebMvcTest {
+class AuthControllerTest {
 
   @Autowired MockMvc mvc;
 
