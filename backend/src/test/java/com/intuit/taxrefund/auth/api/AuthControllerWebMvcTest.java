@@ -1,12 +1,12 @@
 package com.intuit.taxrefund.auth.api;
 
-import com.intuit.taxrefund.api.GlobalExceptionHandler;
+import com.intuit.taxrefund.shared.web.GlobalExceptionHandler;
 import com.intuit.taxrefund.auth.CookieService;
 import com.intuit.taxrefund.auth.api.dto.LoginRequest;
 import com.intuit.taxrefund.auth.jwt.JwtService;
 import com.intuit.taxrefund.auth.service.AuthService;
-import com.intuit.taxrefund.ratelimit.RateLimitProps;
-import com.intuit.taxrefund.ratelimit.RedisRateLimiter;
+import com.intuit.taxrefund.shared.ratelimit.RateLimitProps;
+import com.intuit.taxrefund.shared.ratelimit.RedisRateLimiter;
 import jakarta.servlet.http.HttpServletResponse;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;

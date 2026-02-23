@@ -1,9 +1,9 @@
 package com.intuit.taxrefund;
 
-import com.intuit.taxrefund.assistant.core.AssistantProps;
-import com.intuit.taxrefund.config.DemoProps;
-import com.intuit.taxrefund.ml.MlProps;
-import com.intuit.taxrefund.openai.OpenAiProps;
+import com.intuit.taxrefund.assistant.infra.AssistantProps;
+import com.intuit.taxrefund.shared.config.DemoProps;
+import com.intuit.taxrefund.integration.ml.MlProps;
+import com.intuit.taxrefund.integration.openai.OpenAiProps;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.boot.SpringApplication;
@@ -11,7 +11,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 
 import com.intuit.taxrefund.auth.CookieProps;
-import com.intuit.taxrefund.ratelimit.RateLimitProps;
+import com.intuit.taxrefund.shared.ratelimit.RateLimitProps;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication

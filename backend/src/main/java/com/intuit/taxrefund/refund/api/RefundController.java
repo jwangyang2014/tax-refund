@@ -1,12 +1,12 @@
 package com.intuit.taxrefund.refund.api;
 
 import com.intuit.taxrefund.auth.jwt.JwtService;
-import com.intuit.taxrefund.config.DemoProps;
+import com.intuit.taxrefund.shared.config.DemoProps;
 import com.intuit.taxrefund.refund.api.dto.RefundStatusInternalUpdateRequest;
 import com.intuit.taxrefund.refund.api.dto.RefundStatusResponse;
-import com.intuit.taxrefund.refund.service.IrsAdapter;
-import com.intuit.taxrefund.refund.service.MockIrsAdapter;
-import com.intuit.taxrefund.refund.service.RefundService;
+import com.intuit.taxrefund.refund.integration.irs.IrsAdapter;
+import com.intuit.taxrefund.refund.integration.irs.MockIrsAdapter;
+import com.intuit.taxrefund.refund.app.RefundService;
 import jakarta.validation.Valid;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

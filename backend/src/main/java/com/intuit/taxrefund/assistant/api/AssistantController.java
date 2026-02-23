@@ -2,7 +2,7 @@ package com.intuit.taxrefund.assistant.api;
 
 import com.intuit.taxrefund.assistant.api.dto.AssistantChatRequest;
 import com.intuit.taxrefund.assistant.api.dto.AssistantChatResponse;
-import com.intuit.taxrefund.assistant.core.AssistantService;
+import com.intuit.taxrefund.assistant.app.AssistantService;
 import com.intuit.taxrefund.auth.jwt.JwtService;
 import jakarta.validation.Valid;
 import org.apache.logging.log4j.LogManager;

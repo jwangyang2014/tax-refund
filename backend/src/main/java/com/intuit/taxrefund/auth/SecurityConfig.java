@@ -1,11 +1,11 @@
 package com.intuit.taxrefund.auth;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.intuit.taxrefund.api.ApiError;
+import com.intuit.taxrefund.shared.web.ApiError;
 import com.intuit.taxrefund.auth.jwt.JwtAuthenticationFilter;
-import com.intuit.taxrefund.observability.RequestCorrelationFilter;
-import com.intuit.taxrefund.ratelimit.RateLimitFilter;
-import com.intuit.taxrefund.security.SecurityHeadersFilter;
+import com.intuit.taxrefund.shared.web.RequestCorrelationFilter;
+import com.intuit.taxrefund.shared.ratelimit.RateLimitFilter;
+import com.intuit.taxrefund.shared.web.SecurityHeadersFilter;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
