@@ -180,3 +180,25 @@ curl https://api.openai.com/v1/responses \
   }'
 ```
 
+# NLP training
+Refer to `TrainIntentModel` comment on how to train the model with custom data. The training data is in `src/main/resources/training_data.jsonl`. After training, the model is saved to `src/main/resources/intent_model.bin` and loaded at runtime for intent classification.
+
+# LLM
+Example response
+```json
+{
+  "citations": [
+    {
+      "quote": "Long processing times can occur due to verification or return review.",
+      "docId": "IRS_REFUND_PROCESSING_001"
+    },
+    {
+      "quote": "Refund status updates can be delayed during peak processing periods.",
+      "docId": "IRS_REFUND_GENERAL_001"
+    }
+  ],
+  "confidence": "HIGH",
+  "actions": [],
+  "answerMarkdown": "Your refund is currently processing and is estimated to be available on **February 23, 2026**."
+}
+```

@@ -12,7 +12,6 @@ import com.intuit.taxrefund.assistant.infra.PrivacyFilter;
 import com.intuit.taxrefund.assistant.model.*;
 import com.intuit.taxrefund.assistant.nlp.IntentClassifier;
 import com.intuit.taxrefund.auth.jwt.JwtService;
-import com.intuit.taxrefund.llm.AiProvider;
 import com.intuit.taxrefund.llm.LlmClient;
 import com.intuit.taxrefund.llm.LlmClientRouter;
 import com.intuit.taxrefund.llm.MockLlmClient;
@@ -116,7 +115,6 @@ authoritativeData:
 
         // Decide primary provider from configuration
         LlmClient primary = llmRouter.primary();
-        AiProvider provider = AiProvider.from(primary.provider()); // works for mock/openai/gemini naming if you keep them aligned
 
         log.info("assistant_llm_primary userId={} provider={} model={} available={}",
             userId, primary.provider(), primary.model(), primary.isAvailable());
@@ -142,6 +140,17 @@ authoritativeData:
 
             log.info("assistant_llm_call_ok userId={} provider={} chars={}",
                 userId, primary.provider(), json == null ? 0 : json.length());
+
+            System.out.println("***************************");
+            System.out.println("***************************");
+            System.out.println("***************************");
+            System.out.println("***************************");
+            System.out.println("***************************");
+            System.out.println("***************************");
+            System.out.println("***************************");
+            System.out.println("***************************");
+            System.out.println("***************************LLM response JSON: " + json);
+
         } catch (Exception e) {
             log.error("assistant_llm_call_failed userId={} provider={} err={}",
                 userId, primary.provider(), e.toString());
