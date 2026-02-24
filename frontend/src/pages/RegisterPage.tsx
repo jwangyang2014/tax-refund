@@ -12,16 +12,14 @@ type FieldProps = {
 
 function Field(props: FieldProps) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: 8 }}>
-      <label htmlFor={props.id} style={{ fontWeight: 500, paddingTop: 6 }}>
-        {props.label} {props.required ? <span>*</span> : null}
+    <div className="form-row">
+      <label htmlFor={props.id} className="form-label">
+        {props.label} {props.required ? <span className="required">*</span> : null}
       </label>
 
-      <div style={{ display: 'grid', gap: 4 }}>
+      <div>
         {props.children}
-        {props.error ? (
-          <div style={{ color: 'crimson', fontSize: 13 }}>{props.error}</div>
-        ) : null}
+        {props.error ? <div className="field-error">{props.error}</div> : null}
       </div>
     </div>
   );
@@ -49,7 +47,6 @@ export default function RegisterPage(props: {
 
   const required = (v: string) => (v.trim() ? null : 'Required');
 
-  // -------- validation --------
   const passwordLengthError =
     password.length > 0 && password.length < 10
       ? 'Password must be at least 10 characters'
@@ -94,8 +91,6 @@ export default function RegisterPage(props: {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-
-    // show errors (by preventing submit); UI already renders inline errors
     if (!canSubmit) return;
 
     setLoading(true);
@@ -120,13 +115,17 @@ export default function RegisterPage(props: {
   }
 
   return (
-    <div>
-      <h3>Register</h3>
+    <div className="panel">
+      <div className="panel-header">
+        <h3>Register</h3>
+        <p className="muted">Create an account to track your refund and use the assistant.</p>
+      </div>
 
-      <form onSubmit={submit} style={{ display: 'grid', gap: 12, maxWidth: 600 }}>
+      <form onSubmit={submit} className="form-grid" style={{ maxWidth: 720 }}>
         <Field id="reg-email" label="Email" required error={emailError}>
           <input
             id="reg-email"
+            className="input"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             autoComplete="email"
@@ -136,6 +135,7 @@ export default function RegisterPage(props: {
         <Field id="reg-password" label="Password" required error={passwordLengthError}>
           <input
             id="reg-password"
+            className="input"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -146,6 +146,7 @@ export default function RegisterPage(props: {
         <Field id="reg-repeat-password" label="Repeat Password" required error={passwordMatchError}>
           <input
             id="reg-repeat-password"
+            className="input"
             type="password"
             value={repeatPassword}
             onChange={(e) => setRepeatPassword(e.target.value)}
@@ -156,6 +157,7 @@ export default function RegisterPage(props: {
         <Field id="reg-first-name" label="First Name" required error={firstNameError}>
           <input
             id="reg-first-name"
+            className="input"
             value={firstName}
             onChange={(e) => setFirstName(e.target.value)}
             autoComplete="given-name"
@@ -165,6 +167,7 @@ export default function RegisterPage(props: {
         <Field id="reg-last-name" label="Last Name" required error={lastNameError}>
           <input
             id="reg-last-name"
+            className="input"
             value={lastName}
             onChange={(e) => setLastName(e.target.value)}
             autoComplete="family-name"
@@ -174,6 +177,7 @@ export default function RegisterPage(props: {
         <Field id="reg-address" label="Address">
           <input
             id="reg-address"
+            className="input"
             value={address}
             onChange={(e) => setAddress(e.target.value)}
             autoComplete="street-address"
@@ -183,6 +187,7 @@ export default function RegisterPage(props: {
         <Field id="reg-city" label="City" required error={cityError}>
           <input
             id="reg-city"
+            className="input"
             value={city}
             onChange={(e) => setCity(e.target.value)}
             autoComplete="address-level2"
@@ -192,6 +197,7 @@ export default function RegisterPage(props: {
         <Field id="reg-state" label="State" required error={stateError}>
           <input
             id="reg-state"
+            className="input"
             value={state}
             onChange={(e) => setState(e.target.value.toUpperCase())}
             maxLength={2}
@@ -202,16 +208,19 @@ export default function RegisterPage(props: {
         <Field id="reg-phone" label="Phone">
           <input
             id="reg-phone"
+            className="input"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             autoComplete="tel"
           />
         </Field>
 
-        <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
-          <button disabled={!canSubmit}>{loading ? '...' : 'Register'}</button>
+        <div className="form-actions">
+          <button className="btn btn-primary" disabled={!canSubmit}>
+            {loading ? 'Registering...' : 'Register'}
+          </button>
 
-          <button type="button" onClick={props.onBack}>
+          <button type="button" className="btn" onClick={props.onBack}>
             Back
           </button>
         </div>

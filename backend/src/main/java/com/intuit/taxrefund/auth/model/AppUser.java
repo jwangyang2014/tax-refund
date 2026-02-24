@@ -34,7 +34,7 @@ public class AppUser {
     @Column(nullable = false, name = "state", length = 2)
     private String state;
 
-    @Column(nullable = false, name = "phone", length = 30)
+    @Column(nullable = true, name = "phone", length = 30)
     private String phone;
 
     // ✅ read-only from API perspective; still stored in DB
@@ -113,5 +113,31 @@ public class AppUser {
     // For testing
     public void setIdForTest(Long id) {
         this.id = id;
+    }
+
+// Add these methods to AppUser.java
+
+    public void setFirstName(String firstName) {
+        this.firstName = firstName;
+    }
+
+    public void setLastName(String lastName) {
+        this.lastName = lastName;
+    }
+
+    public void setAddress(String address) {
+        this.address = address;
+    }
+
+    public void setCity(String city) {
+        this.city = city;
+    }
+
+    public void setState(String state) {
+        this.state = state;
+    }
+
+    public void setPhone(String phone) {
+        this.phone = phone;
     }
 }

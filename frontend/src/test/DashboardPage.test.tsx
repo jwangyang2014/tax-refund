@@ -47,24 +47,22 @@ describe('DashboardPage', () => {
   });
 
   it('loads and displays refund status', async () => {
-    const onLogout = vi.fn();
     const onError = vi.fn();
 
     mockGetLatestRefund.mockResolvedValue(makeRefund('PROCESSING'));
 
-    render(<DashboardPage onLogout={onLogout} onError={onError} />);
+    render(<DashboardPage onError={onError} />);
 
     await expectStatus('PROCESSING');
     expect(onError).not.toHaveBeenCalled();
   });
 
   it('shows usability guidance for current status', async () => {
-    const onLogout = vi.fn();
     const onError = vi.fn();
 
     mockGetLatestRefund.mockResolvedValue(makeRefund('PROCESSING'));
 
-    render(<DashboardPage onLogout={onLogout} onError={onError} />);
+    render(<DashboardPage onError={onError} />);
 
     await expectStatus('PROCESSING');
 
@@ -75,14 +73,13 @@ describe('DashboardPage', () => {
   });
 
   it('refresh button calls load again', async () => {
-    const onLogout = vi.fn();
     const onError = vi.fn();
 
     const state = { status: 'RECEIVED' as RefundStatus };
 
     mockGetLatestRefund.mockImplementation(async () => makeRefund(state.status));
 
-    render(<DashboardPage onLogout={onLogout} onError={onError} />);
+    render(<DashboardPage onError={onError} />);
 
     await expectStatus('RECEIVED');
 
@@ -95,7 +92,6 @@ describe('DashboardPage', () => {
   });
 
   it('demo advance calls simulate then reload', async () => {
-    const onLogout = vi.fn();
     const onError = vi.fn();
 
     const state = { status: 'RECEIVED' as RefundStatus };
@@ -108,7 +104,7 @@ describe('DashboardPage', () => {
       state.status = payload.status;
     });
 
-    render(<DashboardPage onLogout={onLogout} onError={onError} />);
+    render(<DashboardPage onError={onError} />);
 
     await expectStatus('RECEIVED');
 
@@ -126,7 +122,6 @@ describe('DashboardPage', () => {
   });
 
   it('assistant ask button sends question and renders response/actions/citations', async () => {
-    const onLogout = vi.fn();
     const onError = vi.fn();
 
     mockGetLatestRefund.mockResolvedValue(makeRefund('PROCESSING'));
@@ -140,7 +135,7 @@ describe('DashboardPage', () => {
       citations: [{ docId: 'PROCESSING_POLICY', quote: 'Processing may take longer during peak season.' }]
     });
 
-    render(<DashboardPage onLogout={onLogout} onError={onError} />);
+    render(<DashboardPage onError={onError} />);
 
     await expectStatus('PROCESSING');
 
@@ -160,7 +155,6 @@ describe('DashboardPage', () => {
   });
 
   it('quick question chip triggers assistant request', async () => {
-    const onLogout = vi.fn();
     const onError = vi.fn();
 
     mockGetLatestRefund.mockResolvedValue(makeRefund('PROCESSING'));
@@ -171,7 +165,7 @@ describe('DashboardPage', () => {
       citations: []
     });
 
-    render(<DashboardPage onLogout={onLogout} onError={onError} />);
+    render(<DashboardPage onError={onError} />);
 
     await expectStatus('PROCESSING');
 
@@ -183,12 +177,11 @@ describe('DashboardPage', () => {
   });
 
   it('reports error via onError when load fails', async () => {
-    const onLogout = vi.fn();
     const onError = vi.fn();
 
     mockGetLatestRefund.mockRejectedValue(new Error('Failed to load'));
 
-    render(<DashboardPage onLogout={onLogout} onError={onError} />);
+    render(<DashboardPage onError={onError} />);
 
     await waitFor(() => {
       expect(onError).toHaveBeenCalledWith('Failed to load');
@@ -196,13 +189,12 @@ describe('DashboardPage', () => {
   });
 
   it('reports error via onError when simulate fails', async () => {
-    const onLogout = vi.fn();
     const onError = vi.fn();
 
     mockGetLatestRefund.mockResolvedValue(makeRefund('RECEIVED', { expectedAmount: 10 }));
     mockSimulateRefundUpdate.mockRejectedValue(new Error('Simulation failed'));
 
-    render(<DashboardPage onLogout={onLogout} onError={onError} />);
+    render(<DashboardPage onError={onError} />);
 
     await expectStatus('RECEIVED');
 
@@ -216,13 +208,12 @@ describe('DashboardPage', () => {
   });
 
   it('reports error via onError when assistant call fails', async () => {
-    const onLogout = vi.fn();
     const onError = vi.fn();
 
     mockGetLatestRefund.mockResolvedValue(makeRefund('PROCESSING'));
     mockAskAssistant.mockRejectedValue(new Error('Assistant unavailable'));
 
-    render(<DashboardPage onLogout={onLogout} onError={onError} />);
+    render(<DashboardPage onError={onError} />);
 
     await expectStatus('PROCESSING');
 
@@ -234,20 +225,5 @@ describe('DashboardPage', () => {
     await waitFor(() => {
       expect(onError).toHaveBeenCalledWith('Assistant unavailable');
     });
-  });
-
-  it('logout calls onLogout', async () => {
-    const onLogout = vi.fn();
-    const onError = vi.fn();
-
-    mockGetLatestRefund.mockResolvedValue(makeRefund('RECEIVED'));
-
-    render(<DashboardPage onLogout={onLogout} onError={onError} />);
-
-    await expectStatus('RECEIVED');
-
-    fireEvent.click(screen.getByRole('button', { name: 'Logout' }));
-
-    expect(onLogout).toHaveBeenCalledTimes(1);
   });
 });

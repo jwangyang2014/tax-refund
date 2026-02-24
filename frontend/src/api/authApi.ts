@@ -1,12 +1,14 @@
+// src/api/authApi.ts
 import { apiFetch, setAccessToken } from "./http";
 import { readApiError } from "./error";
+import type { MeResponse } from "./types";
 
 export type RegisterPayload = {
   email: string;
   password: string;
   firstName: string;
   lastName: string;
-  address: string | null; // optional
+  address: string | null;
   city: string;
   state: string;
   phone: string | null;
@@ -38,8 +40,8 @@ export async function logout(): Promise<void> {
   setAccessToken(null);
 }
 
-export async function me(): Promise<{ userId: number; email: string; role: string }> {
+export async function me(): Promise<MeResponse> {
   const res = await apiFetch('/api/profile/me');
   if (!res.ok) throw new Error(await readApiError(res));
-  return (await res.json()) as { userId: number; email: string; role: string };
+  return (await res.json()) as MeResponse;
 }
