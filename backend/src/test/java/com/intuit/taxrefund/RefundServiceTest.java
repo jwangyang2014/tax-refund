@@ -7,7 +7,7 @@ import com.intuit.taxrefund.refund.integration.irs.IrsAdapter;
 import com.intuit.taxrefund.refund.model.RefundAccessAudit;
 import com.intuit.taxrefund.refund.repository.RefundAccessAuditRepository;
 import com.intuit.taxrefund.refund.service.RefundService;
-import com.intuit.taxrefund.refund.service.RefundStatusPersistenceService;
+import com.intuit.taxrefund.refund.service.RefundSyncService;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
@@ -24,14 +24,14 @@ class RefundServiceTest {
 
   private static RefundService newSvc(
       IrsAdapter irs,
-      RefundStatusPersistenceService persistenceService,
+      RefundSyncService refundSyncService,
       RefundAccessAuditRepository auditRepo,
       StringRedisTemplate redis,
       ObjectMapper objectMapper
   ) {
     return new RefundService(
         irs,
-        persistenceService,
+        refundSyncService,
         auditRepo,
         redis,
         objectMapper
@@ -39,9 +39,9 @@ class RefundServiceTest {
   }
 
   @Test
-  void latest_whenCacheMiss_fetchesIrs_callsPersistence_cachesResponse_andAuditsSuccess() throws Exception {
+  void latest_whenCacheMiss_fetchesIrs_callsSyncService_cachesResponse_andAuditsSuccess() throws Exception {
     IrsAdapter irs = mock(IrsAdapter.class);
-    RefundStatusPersistenceService persistenceService = mock(RefundStatusPersistenceService.class);
+    RefundSyncService refundSyncService = mock(RefundSyncService.class);
     RefundAccessAuditRepository auditRepo = mock(RefundAccessAuditRepository.class);
 
     StringRedisTemplate redis = mock(StringRedisTemplate.class);
@@ -51,7 +51,7 @@ class RefundServiceTest {
     when(valueOps.get("refund:latest:1")).thenReturn(null); // cache miss
 
     ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
-    RefundService svc = newSvc(irs, persistenceService, auditRepo, redis, objectMapper);
+    RefundService svc = newSvc(irs, refundSyncService, auditRepo, redis, objectMapper);
 
     when(irs.fetchMostRecentRefund(1L)).thenReturn(new IrsAdapter.IrsRefundResult(
         2025, com.intuit.taxrefund.refund.model.RefundStatus.PROCESSING, new BigDecimal("999.99"), "IRS-1"
@@ -60,8 +60,8 @@ class RefundServiceTest {
     Instant now = Instant.now();
     Instant predictedAt = now.plusSeconds(7 * 86400L);
 
-    when(persistenceService.upsertLatestFromIrs(eq(1L), any(IrsAdapter.IrsRefundResult.class), eq("refund:latest:1")))
-        .thenReturn(new RefundStatusPersistenceService.PersistedRefundView(
+    when(refundSyncService.reconcileLatestRefundFromIrs(eq(1L), any(IrsAdapter.IrsRefundResult.class)))
+        .thenReturn(new RefundSyncService.ReconciledRefundView(
             2025,
             "PROCESSING",
             now,
@@ -83,8 +83,8 @@ class RefundServiceTest {
     assertNull(resp.aiExplanation());
 
     verify(irs, times(1)).fetchMostRecentRefund(1L);
-    verify(persistenceService, times(1))
-        .upsertLatestFromIrs(eq(1L), any(IrsAdapter.IrsRefundResult.class), eq("refund:latest:1"));
+    verify(refundSyncService, times(1))
+        .reconcileLatestRefundFromIrs(eq(1L), any(IrsAdapter.IrsRefundResult.class));
 
     // cached response written
     verify(valueOps, times(1)).set(eq("refund:latest:1"), anyString(), eq(Duration.ofSeconds(60)));
@@ -101,7 +101,7 @@ class RefundServiceTest {
   @Test
   void latest_returnsCachedResponse_whenCacheHit_andAuditsSuccess() throws Exception {
     IrsAdapter irs = mock(IrsAdapter.class);
-    RefundStatusPersistenceService persistenceService = mock(RefundStatusPersistenceService.class);
+    RefundSyncService refundSyncService = mock(RefundSyncService.class);
     RefundAccessAuditRepository auditRepo = mock(RefundAccessAuditRepository.class);
 
     StringRedisTemplate redis = mock(StringRedisTemplate.class);
@@ -124,7 +124,7 @@ class RefundServiceTest {
 
     when(auditRepo.save(any(RefundAccessAudit.class))).thenAnswer(inv -> inv.getArgument(0));
 
-    RefundService svc = newSvc(irs, persistenceService, auditRepo, redis, objectMapper);
+    RefundService svc = newSvc(irs, refundSyncService, auditRepo, redis, objectMapper);
 
     JwtService.JwtPrincipal principal = new JwtService.JwtPrincipal(1L, "u1@example.com", "USER");
     RefundStatusResponse resp = svc.getLatestRefundStatus(principal, "corr-3");
@@ -136,7 +136,7 @@ class RefundServiceTest {
 
     // No downstream calls on cache hit
     verifyNoInteractions(irs);
-    verifyNoInteractions(persistenceService);
+    verifyNoInteractions(refundSyncService);
 
     // should not overwrite cache on cache hit
     verify(valueOps, never()).set(anyString(), anyString(), any());
@@ -153,7 +153,7 @@ class RefundServiceTest {
   @Test
   void latest_whenIrsFetchThrows_stillAuditsFailure() throws Exception {
     IrsAdapter irs = mock(IrsAdapter.class);
-    RefundStatusPersistenceService persistenceService = mock(RefundStatusPersistenceService.class);
+    RefundSyncService refundSyncService = mock(RefundSyncService.class);
     RefundAccessAuditRepository auditRepo = mock(RefundAccessAuditRepository.class);
 
     StringRedisTemplate redis = mock(StringRedisTemplate.class);
@@ -165,7 +165,7 @@ class RefundServiceTest {
     ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
     when(auditRepo.save(any(RefundAccessAudit.class))).thenAnswer(inv -> inv.getArgument(0));
 
-    RefundService svc = newSvc(irs, persistenceService, auditRepo, redis, objectMapper);
+    RefundService svc = newSvc(irs, refundSyncService, auditRepo, redis, objectMapper);
 
     when(irs.fetchMostRecentRefund(1L)).thenThrow(new RuntimeException("IRS down"));
 
@@ -173,7 +173,7 @@ class RefundServiceTest {
 
     assertThrows(RuntimeException.class, () -> svc.getLatestRefundStatus(principal, "corr-fail"));
 
-    verifyNoInteractions(persistenceService);
+    verifyNoInteractions(refundSyncService);
 
     // audit written (success=false)
     verify(auditRepo, times(1)).save(argThat(a ->
@@ -185,9 +185,9 @@ class RefundServiceTest {
   }
 
   @Test
-  void latest_whenPersistenceThrows_stillAuditsFailure_andDoesNotCache() throws Exception {
+  void latest_whenSyncServiceThrows_stillAuditsFailure_andDoesNotCache() throws Exception {
     IrsAdapter irs = mock(IrsAdapter.class);
-    RefundStatusPersistenceService persistenceService = mock(RefundStatusPersistenceService.class);
+    RefundSyncService refundSyncService = mock(RefundSyncService.class);
     RefundAccessAuditRepository auditRepo = mock(RefundAccessAuditRepository.class);
 
     StringRedisTemplate redis = mock(StringRedisTemplate.class);
@@ -197,19 +197,19 @@ class RefundServiceTest {
     when(valueOps.get("refund:latest:1")).thenReturn(null);
 
     ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
-    RefundService svc = newSvc(irs, persistenceService, auditRepo, redis, objectMapper);
+    RefundService svc = newSvc(irs, refundSyncService, auditRepo, redis, objectMapper);
 
     when(irs.fetchMostRecentRefund(1L)).thenReturn(new IrsAdapter.IrsRefundResult(
         2025, com.intuit.taxrefund.refund.model.RefundStatus.PROCESSING, new BigDecimal("10.00"), "IRS-ERR"
     ));
-    when(persistenceService.upsertLatestFromIrs(eq(1L), any(IrsAdapter.IrsRefundResult.class), eq("refund:latest:1")))
+    when(refundSyncService.reconcileLatestRefundFromIrs(eq(1L), any(IrsAdapter.IrsRefundResult.class)))
         .thenThrow(new RuntimeException("DB failed"));
 
     when(auditRepo.save(any(RefundAccessAudit.class))).thenAnswer(inv -> inv.getArgument(0));
 
     JwtService.JwtPrincipal principal = new JwtService.JwtPrincipal(1L, "u1@example.com", "USER");
 
-    assertThrows(RuntimeException.class, () -> svc.getLatestRefundStatus(principal, "corr-persist-fail"));
+    assertThrows(RuntimeException.class, () -> svc.getLatestRefundStatus(principal, "corr-sync-fail"));
 
     verify(valueOps, never()).set(anyString(), anyString(), any());
 
@@ -217,7 +217,7 @@ class RefundServiceTest {
         a.getUserId().equals(1L)
             && a.getEndpoint().equals("GET /api/refund/latest")
             && !a.isSuccess()
-            && "corr-persist-fail".equals(a.getCorrelationId())
+            && "corr-sync-fail".equals(a.getCorrelationId())
     ));
   }
 }

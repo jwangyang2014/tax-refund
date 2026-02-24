@@ -13,20 +13,19 @@ import com.intuit.taxrefund.refund.repository.RefundRecordRepository;
 import com.intuit.taxrefund.refund.repository.RefundStatusEventRepository;
 import com.intuit.taxrefund.shared.outbox.model.OutboxEvent;
 import com.intuit.taxrefund.shared.outbox.repo.OutboxEventRepository;
-import org.springframework.transaction.annotation.Transactional;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Map;
 
 @Service
-public class RefundStatusPersistenceService {
+public class RefundSyncService {
 
-    private static final Logger log = LogManager.getLogger(RefundStatusPersistenceService.class);
+    private static final Logger log = LogManager.getLogger(RefundSyncService.class);
 
     private final RefundRecordRepository refundRepo;
     private final UserRepository userRepo;
@@ -36,7 +35,7 @@ public class RefundStatusPersistenceService {
     private final StringRedisTemplate redis;
     private final ObjectMapper objectMapper;
 
-    public RefundStatusPersistenceService(
+    public RefundSyncService(
         RefundRecordRepository refundRepo,
         UserRepository userRepo,
         RefundStatusEventRepository statusEventRepo,
@@ -54,26 +53,32 @@ public class RefundStatusPersistenceService {
         this.objectMapper = objectMapper;
     }
 
+    /**
+     * Transactional domain reconciliation: IRS source-of-truth -> local DB projection.
+     * Safe to reuse from user-triggered GET flow and future background polling.
+     */
     @Transactional
-    public PersistedRefundView upsertLatestFromIrs(Long userId, IrsAdapter.IrsRefundResult irsResult, String cacheKey) {
+    public ReconciledRefundView reconcileLatestRefundFromIrs(Long userId, IrsAdapter.IrsRefundResult irsResult) {
+        String cacheKey = latestRefundCacheKey(userId);
+
         RefundRecord record = loadOrCreateRecord(userId, irsResult);
 
-        RefundStatus oldStatus = record.getStatus();
+        RefundStatus previousStatus = record.getStatus();
         record.updateFromIrs(irsResult.status(), irsResult.expectedAmount(), irsResult.trackingId());
 
-        RefundStatus newStatus = record.getStatus();
-        boolean statusChanged = oldStatus != newStatus;
+        RefundStatus currentStatus = record.getStatus();
+        boolean statusChanged = previousStatus != currentStatus;
 
         if (statusChanged) {
-            onStatusChanged(userId, record, oldStatus, newStatus);
-            invalidateCache(cacheKey, userId); // best-effort; okay if it fails
+            persistStatusChangeArtifacts(userId, record, previousStatus, currentStatus);
+            invalidateLatestRefundCache(cacheKey, userId); // best effort
         }
 
         Instant estimatedAvailableAt = applyLatestEtaPrediction(userId, record);
 
         refundRepo.save(record);
 
-        return new PersistedRefundView(
+        return new ReconciledRefundView(
             record.getTaxYear(),
             record.getStatus().name(),
             record.getLastUpdatedAt(),
@@ -92,7 +97,7 @@ public class RefundStatusPersistenceService {
             });
     }
 
-    private void onStatusChanged(Long userId, RefundRecord record, RefundStatus oldStatus, RefundStatus newStatus) {
+    private void persistStatusChangeArtifacts(Long userId, RefundRecord record, RefundStatus oldStatus, RefundStatus newStatus) {
         log.info("refund_status_changed userId={} taxYear={} oldStatus={} newStatus={}",
             userId, record.getTaxYear(), oldStatus, newStatus);
 
@@ -110,39 +115,31 @@ public class RefundStatusPersistenceService {
         outboxRepo.save(OutboxEvent.newEvent(
             "REFUND_STATUS_UPDATED",
             userId + ":" + record.getTaxYear(),
-            buildOutboxPayload(userId, record, newStatus)
+            buildRefundStatusUpdatedPayload(userId, record, newStatus)
         ));
     }
 
-    private String buildOutboxPayload(Long userId, RefundRecord record, RefundStatus newStatus) {
+    private String buildRefundStatusUpdatedPayload(Long userId, RefundRecord record, RefundStatus status) {
         try {
             return objectMapper.writeValueAsString(Map.of(
                 "userId", userId,
                 "taxYear", record.getTaxYear(),
                 "filingState", record.getUser().getState(),
-                "status", newStatus.name(),
+                "status", status.name(),
                 "expectedAmount", record.getExpectedAmount(),
                 "trackingId", record.getIrsTrackingId()
             ));
         } catch (Exception e) {
             log.warn("outbox_payload_fallback userId={} taxYear={} err={}", userId, record.getTaxYear(), e.toString());
-            return "{\"userId\":" + userId + ",\"taxYear\":" + record.getTaxYear() + ",\"status\":\"" + newStatus.name() + "\"}";
-        }
-    }
-
-    private void invalidateCache(String cacheKey, Long userId) {
-        try {
-            redis.delete(cacheKey);
-        } catch (Exception e) {
-            log.warn("refund_latest_cache_invalidate_failed userId={} err={}", userId, e.toString());
+            return "{\"userId\":" + userId + ",\"taxYear\":" + record.getTaxYear() + ",\"status\":\"" + status.name() + "\"}";
         }
     }
 
     private Instant applyLatestEtaPrediction(Long userId, RefundRecord record) {
-        Instant estimatedAvailableAt = record.getAvailableAtEstimated(); // fallback
+        Instant estimatedAvailableAt = record.getAvailableAtEstimated();
 
         try {
-            RefundEtaPrediction pred = etaRepo
+            RefundEtaPrediction prediction = etaRepo
                 .findTopByUserIdAndTaxYearAndStatusOrderByCreatedAtDesc(
                     userId,
                     record.getTaxYear(),
@@ -150,8 +147,8 @@ public class RefundStatusPersistenceService {
                 )
                 .orElse(null);
 
-            if (pred != null && pred.getEstimatedAvailableAt() != null) {
-                estimatedAvailableAt = pred.getEstimatedAvailableAt();
+            if (prediction != null && prediction.getEstimatedAvailableAt() != null) {
+                estimatedAvailableAt = prediction.getEstimatedAvailableAt();
                 record.setAvailableAtEstimated(estimatedAvailableAt);
 
                 log.info("eta_prediction_applied userId={} taxYear={} status={} estimatedAvailableAt={}",
@@ -168,11 +165,23 @@ public class RefundStatusPersistenceService {
         return estimatedAvailableAt;
     }
 
-    public record PersistedRefundView(
+    private void invalidateLatestRefundCache(String cacheKey, Long userId) {
+        try {
+            redis.delete(cacheKey);
+        } catch (Exception e) {
+            log.warn("refund_latest_cache_invalidate_failed userId={} err={}", userId, e.toString());
+        }
+    }
+
+    private String latestRefundCacheKey(Long userId) {
+        return "refund:latest:" + userId;
+    }
+
+    public record ReconciledRefundView(
         Integer taxYear,
         String status,
         Instant lastUpdatedAt,
-        BigDecimal expectedAmount,
+        java.math.BigDecimal expectedAmount,
         String trackingId,
         Instant estimatedAvailableAt
     ) {}
