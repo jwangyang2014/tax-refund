@@ -45,3 +45,12 @@ export async function me(): Promise<MeResponse> {
   if (!res.ok) throw new Error(await readApiError(res));
   return (await res.json()) as MeResponse;
 }
+
+export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  const res = await apiFetch('/api/profile/password', {
+    method: 'PUT',
+    body: JSON.stringify({ currentPassword, newPassword })
+  });
+
+  if (!res.ok) throw new Error(await readApiError(res));
+}

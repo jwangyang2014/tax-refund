@@ -1,23 +1,20 @@
-// src/App.tsx
 import { useCallback, useEffect, useState } from "react";
 import { logout, me } from "./api/authApi";
-import type { MeResponse } from "./api/types";
 import ErrorBanner from "./components/ErrorBanner";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import DashboardPage from "./pages/DashboardPage";
 import ProfilePage from "./pages/ProfilePage";
+import SecurityPage from "./pages/SecurityPage";
 import "./styles/app.css";
 
-type Screen = "login" | "register" | "main";
-type MainTab = "refund" | "profile";
+type Screen = 'login' | 'register' | 'app';
+type MainTab = 'refund' | 'profile' | 'security';
 
 export default function App() {
-  const [screen, setScreen] = useState<Screen>("login");
-  const [activeTab, setActiveTab] = useState<MainTab>("refund");
+  const [screen, setScreen] = useState<Screen>('login');
+  const [tab, setTab] = useState<MainTab>('refund');
   const [error, setError] = useState<string | null>(null);
-  const [sessionUser, setSessionUser] = useState<MeResponse | null>(null);
-  const [checkingSession, setCheckingSession] = useState(true);
 
   const handleError = useCallback((message: string) => {
     setError(message);
@@ -25,37 +22,28 @@ export default function App() {
 
   const goLogin = useCallback(() => {
     setError(null);
-    setScreen("login");
+    setScreen('login');
   }, []);
 
   const goRegister = useCallback(() => {
     setError(null);
-    setScreen("register");
+    setScreen('register');
   }, []);
 
-  const goMain = useCallback(async () => {
+  const goApp = useCallback(() => {
     setError(null);
-    try {
-      const user = await me();
-      setSessionUser(user);
-      setActiveTab("refund");
-      setScreen("main");
-    } catch {
-      setScreen("login");
-    }
+    setTab('refund'); // landing tab
+    setScreen('app');
   }, []);
 
   useEffect(() => {
     (async () => {
       try {
-        const user = await me();
-        setSessionUser(user);
-        setActiveTab("refund");
-        setScreen("main");
+        await me();
+        setScreen('app');
+        setTab('refund');
       } catch {
-        setScreen("login");
-      } finally {
-        setCheckingSession(false);
+        setScreen('login');
       }
     })();
   }, []);
@@ -64,86 +52,72 @@ export default function App() {
     try {
       await logout();
     } finally {
-      setSessionUser(null);
       setError(null);
-      setScreen("login");
-      setActiveTab("refund");
+      setScreen('login');
+      setTab('refund');
     }
   }, []);
 
-  if (checkingSession) {
-    return (
-      <div className="app-shell">
-        <div className="app-card">Loading...</div>
-      </div>
-    );
-  }
-
   return (
     <div className="app-shell">
-      <div className="app-card">
+      <div className="app-container">
         <header className="app-header">
           <div>
-            <h1 className="app-title">TurboTax Refund Status</h1>
-            <p className="app-subtitle">Interview Demo</p>
+            <h2 className="app-title">TurboTax Refund Status Demo</h2>
+            <p className="app-subtitle">Refund tracking, profile management, and AI assistance</p>
           </div>
 
-          {screen === "main" && (
-            <div className="header-actions">
-              {sessionUser ? (
-                <span className="chip">{sessionUser.email}</span>
-              ) : null}
-              <button className="btn btn-secondary" onClick={doLogout}>
-                Logout
-              </button>
-            </div>
-          )}
+          {screen === 'app' ? (
+            <button className="btn btn-secondary" onClick={doLogout}>Logout</button>
+          ) : null}
         </header>
 
         <ErrorBanner message={error} />
 
-        {screen === "login" && (
-          <LoginPage
-            onSuccess={goMain}
-            onRegister={goRegister}
-            onError={handleError}
-          />
-        )}
+        {screen === 'login' ? (
+          <LoginPage onSuccess={goApp} onRegister={goRegister} onError={handleError} />
+        ) : null}
 
-        {screen === "register" && (
-          <RegisterPage
-            onSuccess={goLogin}
-            onBack={goLogin}
-            onError={handleError}
-          />
-        )}
+        {screen === 'register' ? (
+          <RegisterPage onSuccess={goLogin} onBack={goLogin} onError={handleError} />
+        ) : null}
 
-        {screen === "main" && (
-          <>
-            <nav className="tabs">
+        {screen === 'app' ? (
+          <div className="main-tabs-shell">
+            <div className="tabs-row" role="tablist" aria-label="Main navigation">
               <button
-                className={`tab ${activeTab === "refund" ? "tab-active" : ""}`}
-                onClick={() => setActiveTab("refund")}
+                role="tab"
+                aria-selected={tab === 'refund'}
+                className={`tab-btn ${tab === 'refund' ? 'active' : ''}`}
+                onClick={() => setTab('refund')}
               >
                 Refund Status
               </button>
               <button
-                className={`tab ${activeTab === "profile" ? "tab-active" : ""}`}
-                onClick={() => setActiveTab("profile")}
+                role="tab"
+                aria-selected={tab === 'profile'}
+                className={`tab-btn ${tab === 'profile' ? 'active' : ''}`}
+                onClick={() => setTab('profile')}
               >
                 Profile
               </button>
-            </nav>
+              <button
+                role="tab"
+                aria-selected={tab === 'security'}
+                className={`tab-btn ${tab === 'security' ? 'active' : ''}`}
+                onClick={() => setTab('security')}
+              >
+                Security
+              </button>
+            </div>
 
-            <section className="tab-panel">
-              {activeTab === "refund" ? (
-                <DashboardPage onError={handleError} />
-              ) : (
-                <ProfilePage onError={handleError} />
-              )}
-            </section>
-          </>
-        )}
+            <div className="tab-panel">
+              {tab === 'refund' && <DashboardPage onError={handleError} />}
+              {tab === 'profile' && <ProfilePage onError={handleError} />}
+              {tab === 'security' && <SecurityPage onError={handleError} />}
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );

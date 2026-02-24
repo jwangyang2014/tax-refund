@@ -11,7 +11,7 @@ import com.intuit.taxrefund.auth.repository.UserRepository;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
@@ -30,20 +30,21 @@ public class AuthService {
     private final PasswordPolicy passwordPolicy;
     private final JwtService jwtService;
     private final long refreshTokenDays;
-
-    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+    private final PasswordEncoder passwordEncoder;
 
     public AuthService(
         UserRepository userRepo,
         RefreshTokenRepository refreshRepo,
         JwtService jwtService,
         PasswordPolicy passwordPolicy,
+        PasswordEncoder passwordEncoder,
         @Value("${app.security.jwt.refreshTokenDays}") long refreshTokenDays
     ) {
         this.userRepo = userRepo;
         this.refreshRepo = refreshRepo;
         this.passwordPolicy = passwordPolicy;
         this.jwtService = jwtService;
+        this.passwordEncoder = passwordEncoder;
         this.refreshTokenDays = refreshTokenDays;
 
         log.info("auth_service_initialized refreshTokenDays={}", refreshTokenDays);
@@ -128,7 +129,6 @@ public class AuthService {
             throw new IllegalArgumentException("Refresh token revoked or expired");
         }
 
-        // Rotate
         stored.revoke();
         refreshRepo.save(stored);
 

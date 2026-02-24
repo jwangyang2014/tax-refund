@@ -140,4 +140,8 @@ public class AppUser {
     public void setPhone(String phone) {
         this.phone = phone;
     }
+
+    public void setPasswordHash(String passwordHash) {
+        this.passwordHash = passwordHash;
+    }
 }

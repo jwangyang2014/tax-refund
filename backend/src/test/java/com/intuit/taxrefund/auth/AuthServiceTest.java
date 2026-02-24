@@ -13,6 +13,7 @@ import com.intuit.taxrefund.auth.service.PasswordPolicy;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -43,11 +44,12 @@ class AuthServiceTest {
     RefreshTokenRepository refreshRepo = mock(RefreshTokenRepository.class);
     JwtService jwtService = mock(JwtService.class);
     PasswordPolicy policy = new PasswordPolicy();
+    PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     when(userRepo.existsByEmailIgnoreCase("a@b.com")).thenReturn(false);
     when(userRepo.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
 
-    AuthService svc = new AuthService(userRepo, refreshRepo, jwtService, policy, 14);
+    AuthService svc = new AuthService(userRepo, refreshRepo, jwtService, policy, passwordEncoder, 14);
 
     AppUser created = svc.register(registerReq("A@B.com"));
 
@@ -71,10 +73,11 @@ class AuthServiceTest {
     UserRepository userRepo = mock(UserRepository.class);
     RefreshTokenRepository refreshRepo = mock(RefreshTokenRepository.class);
     JwtService jwtService = mock(JwtService.class);
+    PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     when(userRepo.existsByEmailIgnoreCase("a@b.com")).thenReturn(true);
 
-    AuthService svc = new AuthService(userRepo, refreshRepo, jwtService, new PasswordPolicy(), 14);
+    AuthService svc = new AuthService(userRepo, refreshRepo, jwtService, new PasswordPolicy(), passwordEncoder, 14);
 
     IllegalArgumentException ex = assertThrows(
         IllegalArgumentException.class,
@@ -88,9 +91,10 @@ class AuthServiceTest {
     UserRepository userRepo = mock(UserRepository.class);
     RefreshTokenRepository refreshRepo = mock(RefreshTokenRepository.class);
     JwtService jwtService = mock(JwtService.class);
+    PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     String rawPassword = "Password123!";
-    String bcryptHash = new BCryptPasswordEncoder().encode(rawPassword);
+    String bcryptHash = passwordEncoder.encode(rawPassword);
 
     AppUser user = new AppUser(
         "u1@example.com",
@@ -111,7 +115,7 @@ class AuthServiceTest {
     ArgumentCaptor<RefreshToken> captor = ArgumentCaptor.forClass(RefreshToken.class);
     when(refreshRepo.save(captor.capture())).thenAnswer(inv -> inv.getArgument(0));
 
-    AuthService svc = new AuthService(userRepo, refreshRepo, jwtService, new PasswordPolicy(), 14);
+    AuthService svc = new AuthService(userRepo, refreshRepo, jwtService, new PasswordPolicy(), passwordEncoder, 14);
 
     AuthService.AuthTokens tokens = svc.login(new LoginRequest("u1@example.com", rawPassword));
 
@@ -131,10 +135,11 @@ class AuthServiceTest {
     UserRepository userRepo = mock(UserRepository.class);
     RefreshTokenRepository refreshRepo = mock(RefreshTokenRepository.class);
     JwtService jwtService = mock(JwtService.class);
+    PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     when(userRepo.findByEmailIgnoreCase("x@y.com")).thenReturn(Optional.empty());
 
-    AuthService svc = new AuthService(userRepo, refreshRepo, jwtService, new PasswordPolicy(), 14);
+    AuthService svc = new AuthService(userRepo, refreshRepo, jwtService, new PasswordPolicy(), passwordEncoder, 14);
 
     IllegalArgumentException ex = assertThrows(
         IllegalArgumentException.class,
@@ -148,10 +153,11 @@ class AuthServiceTest {
     UserRepository userRepo = mock(UserRepository.class);
     RefreshTokenRepository refreshRepo = mock(RefreshTokenRepository.class);
     JwtService jwtService = mock(JwtService.class);
+    PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     AppUser user = new AppUser(
         "u1@example.com",
-        new BCryptPasswordEncoder().encode("Password123!"),
+        passwordEncoder.encode("Password123!"),
         "Yang",
         "Wang",
         null,
@@ -172,7 +178,7 @@ class AuthServiceTest {
     when(jwtService.createAccessToken(1L, "u1@example.com", "USER")).thenReturn("access.jwt");
     when(refreshRepo.save(any(RefreshToken.class))).thenAnswer(inv -> inv.getArgument(0));
 
-    AuthService svc = new AuthService(userRepo, refreshRepo, jwtService, new PasswordPolicy(), 14);
+    AuthService svc = new AuthService(userRepo, refreshRepo, jwtService, new PasswordPolicy(), passwordEncoder, 14);
 
     AuthService.AuthTokens rotated = svc.refresh(raw);
 
@@ -187,10 +193,11 @@ class AuthServiceTest {
     UserRepository userRepo = mock(UserRepository.class);
     RefreshTokenRepository refreshRepo = mock(RefreshTokenRepository.class);
     JwtService jwtService = mock(JwtService.class);
+    PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     AppUser user = new AppUser(
         "u1@example.com",
-        new BCryptPasswordEncoder().encode("Password123!"),
+        passwordEncoder.encode("Password123!"),
         "Yang",
         "Wang",
         null,
@@ -209,7 +216,7 @@ class AuthServiceTest {
     when(refreshRepo.findByJti(jti)).thenReturn(Optional.of(stored));
     when(refreshRepo.save(any(RefreshToken.class))).thenAnswer(inv -> inv.getArgument(0));
 
-    AuthService svc = new AuthService(userRepo, refreshRepo, jwtService, new PasswordPolicy(), 14);
+    AuthService svc = new AuthService(userRepo, refreshRepo, jwtService, new PasswordPolicy(), passwordEncoder, 14);
 
     IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> svc.refresh(attackerRaw));
     assertEquals("Invalid refresh token", ex.getMessage());

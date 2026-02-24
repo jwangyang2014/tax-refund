@@ -1,6 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { register } from '../api/authApi';
 import { errorMessage } from '../utils';
+import { validatePassword } from '../utils/passwordRules';
+import PasswordRequirements from '../components/PasswordRequirements';
 
 type FieldProps = {
   id: string;
@@ -13,8 +15,8 @@ type FieldProps = {
 function Field(props: FieldProps) {
   return (
     <div className="form-row">
-      <label htmlFor={props.id} className="form-label">
-        {props.label} {props.required ? <span className="required">*</span> : null}
+      <label htmlFor={props.id}>
+        {props.label} {props.required ? <span>*</span> : null}
       </label>
 
       <div>
@@ -47,9 +49,11 @@ export default function RegisterPage(props: {
 
   const required = (v: string) => (v.trim() ? null : 'Required');
 
-  const passwordLengthError =
-    password.length > 0 && password.length < 10
-      ? 'Password must be at least 10 characters'
+  const passwordValidation = validatePassword(password);
+
+  const passwordError =
+    password.length > 0 && !passwordValidation.isValid
+      ? passwordValidation.errors[0]
       : null;
 
   const passwordMatchError =
@@ -71,7 +75,7 @@ export default function RegisterPage(props: {
       !lastNameError &&
       !cityError &&
       !stateError &&
-      !passwordLengthError &&
+      passwordValidation.isValid &&
       !passwordMatchError &&
       password.trim().length > 0 &&
       repeatPassword.trim().length > 0
@@ -83,7 +87,7 @@ export default function RegisterPage(props: {
     lastNameError,
     cityError,
     stateError,
-    passwordLengthError,
+    passwordValidation.isValid,
     passwordMatchError,
     password,
     repeatPassword
@@ -115,13 +119,13 @@ export default function RegisterPage(props: {
   }
 
   return (
-    <div className="panel">
+    <div className="panel-card">
       <div className="panel-header">
         <h3>Register</h3>
-        <p className="muted">Create an account to track your refund and use the assistant.</p>
+        <p>Create an account to track refund status and manage your profile.</p>
       </div>
 
-      <form onSubmit={submit} className="form-grid" style={{ maxWidth: 720 }}>
+      <form onSubmit={submit} className="form-grid">
         <Field id="reg-email" label="Email" required error={emailError}>
           <input
             id="reg-email"
@@ -132,7 +136,7 @@ export default function RegisterPage(props: {
           />
         </Field>
 
-        <Field id="reg-password" label="Password" required error={passwordLengthError}>
+        <Field id="reg-password" label="Password" required error={passwordError}>
           <input
             id="reg-password"
             className="input"
@@ -141,6 +145,8 @@ export default function RegisterPage(props: {
             onChange={(e) => setPassword(e.target.value)}
             autoComplete="new-password"
           />
+
+          <PasswordRequirements password={password} />
         </Field>
 
         <Field id="reg-repeat-password" label="Repeat Password" required error={passwordMatchError}>
@@ -216,11 +222,11 @@ export default function RegisterPage(props: {
         </Field>
 
         <div className="form-actions">
-          <button className="btn btn-primary" disabled={!canSubmit}>
+          <button className="btn btn-primary btn-fixed-md" disabled={!canSubmit}>
             {loading ? 'Registering...' : 'Register'}
           </button>
 
-          <button type="button" className="btn" onClick={props.onBack}>
+          <button type="button" className="btn btn-secondary" onClick={props.onBack}>
             Back
           </button>
         </div>

@@ -2,13 +2,14 @@ package com.intuit.taxrefund.profile.controller;
 
 import com.intuit.taxrefund.auth.controller.dto.MeResponse;
 import com.intuit.taxrefund.auth.jwt.JwtService;
+import com.intuit.taxrefund.profile.dto.ChangePasswordRequest;
 import com.intuit.taxrefund.profile.dto.ProfileResponse;
 import com.intuit.taxrefund.profile.dto.UpdateProfileRequest;
 import com.intuit.taxrefund.profile.service.ProfileService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.server.ResponseStatusException;
 
 @RestController
@@ -40,6 +41,15 @@ public class ProfileController {
     ) {
         JwtService.JwtPrincipal principal = requirePrincipal(auth);
         return profileService.updateProfile(principal.userId(), req);
+    }
+
+    @PutMapping("/password")
+    public void changePassword(
+        Authentication auth,
+        @Valid @RequestBody ChangePasswordRequest req
+    ) {
+        JwtService.JwtPrincipal principal = requirePrincipal(auth);
+        profileService.changePassword(principal.userId(), req);
     }
 
     private JwtService.JwtPrincipal requirePrincipal(Authentication auth) {
