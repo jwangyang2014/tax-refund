@@ -659,3 +659,104 @@ body {
     text-align: left;
   }
 }
+
+/* Prevent jarring layout jumps while buttons update */
+.btn {
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease, opacity 120ms ease;
+}
+
+/* Smooth card feel */
+.dashboard-card,
+.status-banner {
+  transition: box-shadow 120ms ease, border-color 120ms ease, background-color 120ms ease;
+}
+
+/* ===== Assistant loading state ===== */
+.assistant-loading {
+  margin-top: 10px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #f8fafc;
+}
+
+.assistant-loading-title {
+  font-weight: 700;
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.assistant-loading-subtitle {
+  color: #64748b;
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.spinner {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 2px solid #cbd5e1;
+  border-top-color: #2563eb;
+  animation: spin 0.9s linear infinite;
+  flex: 0 0 auto;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Suggested actions should NOT look like main CTA buttons */
+.text-action {
+  border: 1px solid #dbeafe;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.text-action:hover {
+  background: #dbeafe;
+  border-color: #93c5fd;
+}
+
+.text-action:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 1px;
+}
+
+/* Quick chips and action chips visually distinct */
+.chip-btn {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #0f172a;
+  border-radius: 999px;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.chip-btn:hover {
+  background: #f8fafc;
+}
+
+/* Optional: reduce page "flick" perception by not dimming disabled too aggressively */
+.btn:disabled,
+.chip-btn:disabled {
+  opacity: 0.75;
+}
+
+/* Keep assistant panel height stable a bit to reduce visual jump */
+.assistant-card {
+  min-height: 280px;
+}

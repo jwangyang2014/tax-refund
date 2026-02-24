@@ -34,7 +34,7 @@ export default function DashboardPage({
     setLoading(true);
     try {
       const latest = await getLatestRefund();
-      setData(latest);
+      setData(latest); // keep current data until new data arrives (no flicker)
     } catch (err: unknown) {
       onError(errorMessage(err));
     } finally {
@@ -70,6 +70,7 @@ export default function DashboardPage({
     if (!finalQuestion) return;
 
     setQuestion(finalQuestion);
+    setAssistant(null); // clear old response to avoid confusion
     setAsking(true);
 
     try {
@@ -123,7 +124,7 @@ export default function DashboardPage({
             {loading ? 'Refreshing...' : 'Refresh'}
           </button>
 
-          <button className="btn btn-secondary" onClick={demoAdvanceStatus} disabled={!data}>
+          <button className="btn btn-secondary" onClick={demoAdvanceStatus} disabled={!data || loading}>
             Demo: Advance Status
           </button>
 
@@ -132,7 +133,7 @@ export default function DashboardPage({
             onClick={() => void onAsk('When will my refund be available?')}
             disabled={!data || asking}
           >
-            Quick: Ask ETA
+            {asking ? 'Thinking...' : 'Quick: Ask ETA'}
           </button>
         </div>
       </div>
@@ -154,7 +155,7 @@ export default function DashboardPage({
             <RefundGuidancePanel
               guidance={guidance}
               asking={asking}
-              onAskQuestion={(q) => void onAsk(q)}
+              onAskQuestion={(qq) => void onAsk(qq)}
             />
           )}
         </div>

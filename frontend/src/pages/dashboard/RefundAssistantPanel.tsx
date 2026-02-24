@@ -36,7 +36,15 @@ export default function RefundAssistantPanel(props: {
         </button>
       </div>
 
-      {!assistant ? (
+      {asking ? (
+        <div className="assistant-loading">
+          <div className="spinner" aria-hidden="true" />
+          <div>
+            <div className="assistant-loading-title">Thinking...</div>
+            <div className="assistant-loading-subtitle">Analyzing your refund status and next steps</div>
+          </div>
+        </div>
+      ) : !assistant ? (
         <div className="assistant-empty">No assistant response yet.</div>
       ) : (
         <div className="assistant-response-wrap">
@@ -54,7 +62,12 @@ export default function RefundAssistantPanel(props: {
               <div className="card-subtitle">Suggested actions</div>
               <div className="chip-wrap">
                 {assistant.actions.map((a, idx) => (
-                  <button key={`${a.type}-${idx}`} onClick={() => onAction(a)} className="chip-btn chip-btn-action">
+                  <button
+                    key={`${a.type}-${idx}`}
+                    onClick={() => onAction(a)}
+                    className="text-action"
+                    type="button"
+                  >
                     {a.label}
                   </button>
                 ))}
