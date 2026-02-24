@@ -23,7 +23,7 @@ export default function PasswordRequirements({ password }: { password: string })
             className={`password-rule ${item.ok ? 'is-ok' : hasTyped ? 'is-pending' : 'is-idle'}`}
           >
             <span className="password-rule-icon" aria-hidden="true">
-              {item.ok ? '✓' : '○'}
+              {item.ok ? '✓' : '•'}
             </span>
             <span>{item.label}</span>
           </li>

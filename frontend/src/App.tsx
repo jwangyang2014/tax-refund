@@ -8,11 +8,11 @@ import ProfilePage from "./pages/ProfilePage";
 import SecurityPage from "./pages/SecurityPage";
 import "./styles/app.css";
 
-type Screen = 'login' | 'register' | 'app';
+type Screen = 'boot' | 'login' | 'register' | 'app';
 type MainTab = 'refund' | 'profile' | 'security';
 
 export default function App() {
-  const [screen, setScreen] = useState<Screen>('login');
+  const [screen, setScreen] = useState<Screen>('boot');
   const [tab, setTab] = useState<MainTab>('refund');
   const [error, setError] = useState<string | null>(null);
 
@@ -32,20 +32,31 @@ export default function App() {
 
   const goApp = useCallback(() => {
     setError(null);
-    setTab('refund'); // landing tab
+    setTab('refund');
     setScreen('app');
   }, []);
 
   useEffect(() => {
+    let mounted = true;
+
     (async () => {
       try {
-        await me();
-        setScreen('app');
+        await me(); // silent auth check
+        if (!mounted) return;
+        setError(null);
         setTab('refund');
+        setScreen('app');
       } catch {
+        // expected when not logged in — do NOT show error
+        if (!mounted) return;
+        setError(null);
         setScreen('login');
       }
     })();
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const doLogout = useCallback(async () => {
@@ -53,10 +64,20 @@ export default function App() {
       await logout();
     } finally {
       setError(null);
-      setScreen('login');
       setTab('refund');
+      setScreen('login');
     }
   }, []);
+
+  if (screen === 'boot') {
+    return (
+      <div className="app-shell">
+        <div className="app-container">
+          <div className="panel-card">Loading...</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="app-shell">
@@ -72,17 +93,18 @@ export default function App() {
           ) : null}
         </header>
 
+        {/* show banner only after boot */}
         <ErrorBanner message={error} />
 
-        {screen === 'login' ? (
+        {screen === 'login' && (
           <LoginPage onSuccess={goApp} onRegister={goRegister} onError={handleError} />
-        ) : null}
+        )}
 
-        {screen === 'register' ? (
+        {screen === 'register' && (
           <RegisterPage onSuccess={goLogin} onBack={goLogin} onError={handleError} />
-        ) : null}
+        )}
 
-        {screen === 'app' ? (
+        {screen === 'app' && (
           <div className="main-tabs-shell">
             <div className="tabs-row" role="tablist" aria-label="Main navigation">
               <button
@@ -117,7 +139,7 @@ export default function App() {
               {tab === 'security' && <SecurityPage onError={handleError} />}
             </div>
           </div>
-        ) : null}
+        )}
       </div>
     </div>
   );
