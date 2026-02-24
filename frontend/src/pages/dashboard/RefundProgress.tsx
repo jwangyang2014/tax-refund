@@ -8,43 +8,35 @@ export default function RefundProgress(props: {
   const { status, currentStepIdx } = props;
 
   return (
-    <div style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, marginBottom: 12 }}>
-      <div style={{ fontWeight: 600, marginBottom: 10 }}>Refund progress</div>
+    <section className="dashboard-card">
+      <div className="card-title">Refund progress</div>
 
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+      <div className="progress-pills">
         {STATUS_ORDER.map((s, idx) => {
           const complete = currentStepIdx >= 0 && idx <= currentStepIdx;
           const active = status === s;
+
+          const cls = active
+            ? 'progress-pill is-active'
+            : complete
+            ? 'progress-pill is-complete'
+            : 'progress-pill';
+
           return (
-            <div
-              key={s}
-              style={{
-                padding: '8px 10px',
-                borderRadius: 999,
-                border: '1px solid #ccc',
-                background: active ? '#cfe2ff' : complete ? '#d1e7dd' : '#f8f9fa',
-                fontWeight: active ? 700 : 500
-              }}
-            >
-              {idx + 1}. {s}
+            <div key={s} className={cls}>
+              <span className="progress-pill-index">{idx + 1}</span>
+              <span>{s}</span>
             </div>
           );
         })}
 
         {status && (status === 'REJECTED' || status === 'NOT_FOUND') && (
-          <div
-            style={{
-              padding: '8px 10px',
-              borderRadius: 999,
-              border: '1px solid #ccc',
-              background: '#f8d7da',
-              fontWeight: 700
-            }}
-          >
-            ! {status}
+          <div className="progress-pill is-alert">
+            <span className="progress-pill-index">!</span>
+            <span>{status}</span>
           </div>
         )}
       </div>
-    </div>
+    </section>
   );
 }

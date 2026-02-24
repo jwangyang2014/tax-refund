@@ -7,31 +7,32 @@ export default function RefundStatusBanner(props: {
   freshness?: string;
   lastUpdatedText?: string;
 }) {
+  const toneClass =
+    props.tone.label === 'Refund available'
+      ? 'status-banner tone-success'
+      : props.tone.label === 'Needs attention'
+      ? 'status-banner tone-danger'
+      : props.tone.label === 'Not found'
+      ? 'status-banner tone-warning'
+      : 'status-banner tone-info';
+
   return (
-    <div
-      style={{
-        border: '1px solid #ddd',
-        borderRadius: 8,
-        padding: 12,
-        marginBottom: 12,
-        background: props.tone.bg
-      }}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+    <section className={toneClass} aria-label="Refund summary">
+      <div className="status-banner-content">
         <div>
-          <div style={{ fontWeight: 700, color: props.tone.color }}>{props.tone.label}</div>
-          <div style={{ color: '#333', marginTop: 4 }}>
+          <div className="status-banner-label">{props.tone.label}</div>
+          <div className="status-banner-title">
             {props.hasData ? props.title : 'Loading refund status...'}
           </div>
         </div>
 
         {props.hasData && props.freshness && props.lastUpdatedText ? (
-          <div style={{ color: '#333', fontSize: 13 }}>
-            <div><strong>{props.freshness}</strong></div>
+          <div className="status-banner-meta">
+            <div className="status-banner-freshness">{props.freshness}</div>
             <div>{props.lastUpdatedText}</div>
           </div>
         ) : null}
       </div>
-    </div>
+    </section>
   );
 }

@@ -43,7 +43,7 @@ export default function DashboardPage({
   }, [onError]);
 
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
 
   async function demoAdvanceStatus() {
@@ -109,25 +109,32 @@ export default function DashboardPage({
   const currentStepIdx = getStatusStepIndex(data?.status ?? '');
 
   return (
-    <div style={{ maxWidth: 860 }}>
-      <h3 style={{ marginBottom: 8 }}>Refund Status</h3>
+    <div className="dashboard-page">
+      <div className="dashboard-hero">
+        <div>
+          <h3 className="dashboard-title">Refund Status</h3>
+          <p className="dashboard-subtitle">
+            Check your latest refund status, estimated availability date, and get guided help if something looks delayed.
+          </p>
+        </div>
 
-      <p style={{ marginTop: 0, color: '#555', maxWidth: 760 }}>
-        Check your latest refund status, see the estimated availability date, and get guided help if something looks delayed.
-      </p>
+        <div className="dashboard-actions">
+          <button className="btn btn-secondary" onClick={load} disabled={loading}>
+            {loading ? 'Refreshing...' : 'Refresh'}
+          </button>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-        <button onClick={load} disabled={loading}>
-          {loading ? '...' : 'Refresh'}
-        </button>
+          <button className="btn btn-secondary" onClick={demoAdvanceStatus} disabled={!data}>
+            Demo: Advance Status
+          </button>
 
-        <button onClick={demoAdvanceStatus} disabled={!data}>
-          Demo: Advance Status
-        </button>
-
-        <button onClick={() => void onAsk('When will my refund be available?')} disabled={!data || asking}>
-          Quick: Ask ETA
-        </button>
+          <button
+            className="btn btn-primary"
+            onClick={() => void onAsk('When will my refund be available?')}
+            disabled={!data || asking}
+          >
+            Quick: Ask ETA
+          </button>
+        </div>
       </div>
 
       <RefundStatusBanner
@@ -140,24 +147,29 @@ export default function DashboardPage({
 
       <RefundProgress status={data?.status} currentStepIdx={currentStepIdx} />
 
-      <RefundDetailsCard data={data} />
+      <div className="dashboard-grid">
+        <div className="dashboard-main">
+          <RefundDetailsCard data={data} />
+          {data && (
+            <RefundGuidancePanel
+              guidance={guidance}
+              asking={asking}
+              onAskQuestion={(q) => void onAsk(q)}
+            />
+          )}
+        </div>
 
-      {data && (
-        <RefundGuidancePanel
-          guidance={guidance}
-          asking={asking}
-          onAskQuestion={(q) => void onAsk(q)}
-        />
-      )}
-
-      <RefundAssistantPanel
-        question={question}
-        asking={asking}
-        assistant={assistant}
-        setQuestion={setQuestion}
-        onAsk={() => void onAsk()}
-        onAction={handleAction}
-      />
+        <div className="dashboard-side">
+          <RefundAssistantPanel
+            question={question}
+            asking={asking}
+            assistant={assistant}
+            setQuestion={setQuestion}
+            onAsk={() => void onAsk()}
+            onAction={handleAction}
+          />
+        </div>
+      </div>
     </div>
   );
 }

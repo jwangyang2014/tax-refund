@@ -13,17 +13,17 @@ export default function RefundAssistantPanel(props: {
   const { question, asking, assistant, setQuestion, onAsk, onAction } = props;
 
   return (
-    <div style={{ marginTop: 18, border: '1px solid #999', borderRadius: 8, padding: 12, maxWidth: 820 }}>
-      <h4 style={{ marginTop: 0 }}>Ask about your refund</h4>
+    <section className="dashboard-card assistant-card">
+      <h4 className="card-section-title">Ask about your refund</h4>
 
-      <p style={{ marginTop: 0, color: '#555' }}>
+      <p className="card-paragraph muted">
         Ask in plain English, for example: “Why is my refund delayed?” or “What should I do next?”
       </p>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+      <div className="assistant-input-row">
         <input
           aria-label="Assistant question"
-          style={{ flex: 1, padding: 8 }}
+          className="input"
           placeholder="E.g., When will my refund be available? Why is it stuck in processing?"
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
@@ -31,32 +31,30 @@ export default function RefundAssistantPanel(props: {
             if (e.key === 'Enter') onAsk();
           }}
         />
-        <button onClick={onAsk} disabled={asking || !question.trim()}>
-          {asking ? '...' : 'Ask'}
+        <button className="btn btn-primary" onClick={onAsk} disabled={asking || !question.trim()}>
+          {asking ? 'Asking...' : 'Ask'}
         </button>
       </div>
 
       {!assistant ? (
-        <p style={{ margin: 0 }}>No assistant response yet.</p>
+        <div className="assistant-empty">No assistant response yet.</div>
       ) : (
-        <div>
-          <div style={{ padding: 10, border: '1px solid #ddd', borderRadius: 6 }}>
-            <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div className="assistant-response-wrap">
+          <div className="assistant-response-box">
+            <div className="assistant-response-header">
               <strong>Assistant response</strong>
               <ConfidenceBadge confidence={assistant.confidence} />
             </div>
 
-            <pre style={{ whiteSpace: 'pre-wrap', margin: 0, fontFamily: 'inherit' }}>
-              {assistant.answerMarkdown}
-            </pre>
+            <pre className="assistant-response-text">{assistant.answerMarkdown}</pre>
           </div>
 
           {assistant.actions?.length > 0 && (
-            <div style={{ marginTop: 10 }}>
-              <strong>Suggested actions</strong>
-              <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <div className="card-block">
+              <div className="card-subtitle">Suggested actions</div>
+              <div className="chip-wrap">
                 {assistant.actions.map((a, idx) => (
-                  <button key={`${a.type}-${idx}`} onClick={() => onAction(a)}>
+                  <button key={`${a.type}-${idx}`} onClick={() => onAction(a)} className="chip-btn chip-btn-action">
                     {a.label}
                   </button>
                 ))}
@@ -65,9 +63,9 @@ export default function RefundAssistantPanel(props: {
           )}
 
           {assistant.citations?.length > 0 && (
-            <div style={{ marginTop: 10 }}>
-              <strong>Citations</strong>
-              <ul>
+            <div className="card-block">
+              <div className="card-subtitle">Citations</div>
+              <ul className="citation-list">
                 {assistant.citations.map((c, idx) => (
                   <li key={idx}>
                     <code>{c.docId}</code>: {c.quote}
@@ -78,6 +76,6 @@ export default function RefundAssistantPanel(props: {
           )}
         </div>
       )}
-    </div>
+    </section>
   );
 }
