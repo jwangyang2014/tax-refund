@@ -1,5 +1,5 @@
 import { apiFetch } from "./http";
-import { RefundStatusResponse } from "./.types";
+import { RefundStatusResponse } from "./types";
 
 export async function getLatestRefund(): Promise<RefundStatusResponse> {
   const res = await apiFetch('/api/refund/latest');

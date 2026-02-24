@@ -1,6 +1,6 @@
 package com.intuit.taxrefund.assistant.infra;
 
-import com.intuit.taxrefund.refund.api.dto.RefundStatusResponse;
+import com.intuit.taxrefund.refund.controller.dto.RefundStatusResponse;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;

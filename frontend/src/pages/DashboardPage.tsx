@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { getLatestRefund, simulateRefundUpdate } from '../api/refundApi';
 import { askAssistant, type AssistantResponse } from '../api/assistantApi';
-import type { RefundStatusResponse } from '../api/.types';
+import type { RefundStatusResponse } from '../api/types';
 import { errorMessage } from '../utils';
 
 const STATUS_ORDER = ['RECEIVED', 'PROCESSING', 'APPROVED', 'SENT', 'AVAILABLE'] as const;

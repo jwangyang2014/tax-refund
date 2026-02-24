@@ -1,11 +1,10 @@
 package com.intuit.taxrefund.llm;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.intuit.taxrefund.assistant.api.dto.AssistantChatResponse;
-import com.intuit.taxrefund.assistant.api.dto.AssistantChatResponse.Action;
-import com.intuit.taxrefund.assistant.api.dto.AssistantChatResponse.ActionType;
-import com.intuit.taxrefund.assistant.api.dto.AssistantChatResponse.Confidence;
-import com.intuit.taxrefund.refund.api.dto.RefundStatusResponse;
+import com.intuit.taxrefund.assistant.controller.dto.AssistantChatResponse;
+import com.intuit.taxrefund.assistant.controller.dto.AssistantChatResponse.Action;
+import com.intuit.taxrefund.assistant.controller.dto.AssistantChatResponse.Confidence;
+import com.intuit.taxrefund.refund.controller.dto.RefundStatusResponse;
 import com.intuit.taxrefund.refund.model.RefundStatus;
 import org.springframework.stereotype.Component;
 

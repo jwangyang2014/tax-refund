@@ -1,6 +1,6 @@
 package com.intuit.taxrefund.profile;
 
-import com.intuit.taxrefund.auth.api.dto.MeResponse;
+import com.intuit.taxrefund.auth.controller.dto.MeResponse;
 import com.intuit.taxrefund.auth.jwt.JwtService;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;

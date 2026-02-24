@@ -1,13 +1,13 @@
 package com.intuit.taxrefund.auth.service;
 
-import com.intuit.taxrefund.auth.api.dto.LoginRequest;
-import com.intuit.taxrefund.auth.api.dto.RegisterRequest;
+import com.intuit.taxrefund.auth.controller.dto.LoginRequest;
+import com.intuit.taxrefund.auth.controller.dto.RegisterRequest;
 import com.intuit.taxrefund.auth.jwt.JwtService;
 import com.intuit.taxrefund.auth.model.AppUser;
 import com.intuit.taxrefund.auth.model.RefreshToken;
 import com.intuit.taxrefund.auth.model.Role;
-import com.intuit.taxrefund.auth.repo.RefreshTokenRepository;
-import com.intuit.taxrefund.auth.repo.UserRepository;
+import com.intuit.taxrefund.auth.repository.RefreshTokenRepository;
+import com.intuit.taxrefund.auth.repository.UserRepository;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Value;

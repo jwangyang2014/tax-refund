@@ -1,6 +1,6 @@
 package com.intuit.taxrefund.assistant.model;
 
-import com.intuit.taxrefund.assistant.api.dto.AssistantChatResponse.Citation;
+import com.intuit.taxrefund.assistant.controller.dto.AssistantChatResponse.Citation;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;

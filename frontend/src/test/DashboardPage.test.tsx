@@ -14,7 +14,7 @@ vi.mock('../api/assistantApi', () => ({
 import { getLatestRefund, simulateRefundUpdate } from '../api/refundApi';
 import { askAssistant } from '../api/assistantApi';
 import DashboardPage from '../pages/DashboardPage';
-import type { RefundStatusResponse } from '../api/.types';
+import type { RefundStatusResponse } from '../api/types';
 
 const mockGetLatestRefund = vi.mocked(getLatestRefund);
 const mockSimulateRefundUpdate = vi.mocked(simulateRefundUpdate);
