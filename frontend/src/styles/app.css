@@ -760,3 +760,98 @@ body {
 .assistant-card {
   min-height: 280px;
 }
+
+/* ===== Stable button widths to avoid layout shift ===== */
+.btn-fixed-sm {
+  min-width: 88px;   /* Ask / Asking... */
+  text-align: center;
+}
+
+.btn-fixed-md {
+  min-width: 120px;  /* Refresh / Refreshing... / Thinking... */
+  text-align: center;
+}
+
+.btn-fixed-lg {
+  min-width: 170px;  /* Demo: Advance Status */
+  text-align: center;
+}
+
+/* Prevent jarring UI flicker */
+.btn,
+.dashboard-card,
+.status-banner {
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease, opacity 120ms ease, box-shadow 120ms ease;
+}
+
+/* Keep disabled controls readable */
+.btn:disabled,
+.chip-btn:disabled {
+  opacity: 0.78;
+}
+
+/* ===== Assistant loading state ===== */
+.assistant-card {
+  min-height: 280px;
+}
+
+.assistant-loading {
+  margin-top: 10px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #f8fafc;
+}
+
+.assistant-loading-title {
+  font-weight: 700;
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.assistant-loading-subtitle {
+  color: #64748b;
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.spinner {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 2px solid #cbd5e1;
+  border-top-color: #2563eb;
+  animation: spin 0.9s linear infinite;
+  flex: 0 0 auto;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ===== Suggested actions: link-chip style (not CTA buttons) ===== */
+.text-action {
+  border: 1px solid #dbeafe;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.text-action:hover {
+  background: #dbeafe;
+  border-color: #93c5fd;
+}
+
+.text-action:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 1px;
+}

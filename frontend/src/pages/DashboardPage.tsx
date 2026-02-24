@@ -34,7 +34,7 @@ export default function DashboardPage({
     setLoading(true);
     try {
       const latest = await getLatestRefund();
-      setData(latest); // keep current data until new data arrives (no flicker)
+      setData(latest);
     } catch (err: unknown) {
       onError(errorMessage(err));
     } finally {
@@ -70,7 +70,7 @@ export default function DashboardPage({
     if (!finalQuestion) return;
 
     setQuestion(finalQuestion);
-    setAssistant(null); // clear old response to avoid confusion
+    setAssistant(null); // remove old response while loading
     setAsking(true);
 
     try {
@@ -101,7 +101,11 @@ export default function DashboardPage({
         `Hi Support,\n\nI need help with my refund status.\n\nStatus: ${data?.status ?? 'Unknown'}\nTax Year: ${data?.taxYear ?? 'Unknown'}\nLast Updated: ${data?.lastUpdatedAt ?? 'Unknown'}\n\nThanks.`
       );
       window.location.href = `mailto:support@example.com?subject=${subject}&body=${body}`;
+      return;
     }
+
+    // Fallback so unknown action never becomes a dead click
+    onError('This suggested action is not wired yet in this demo.');
   }
 
   const tone = getStatusTone(data?.status ?? '');
@@ -120,16 +124,24 @@ export default function DashboardPage({
         </div>
 
         <div className="dashboard-actions">
-          <button className="btn btn-secondary" onClick={load} disabled={loading}>
+          <button
+            className="btn btn-secondary btn-fixed-md"
+            onClick={load}
+            disabled={loading}
+          >
             {loading ? 'Refreshing...' : 'Refresh'}
           </button>
 
-          <button className="btn btn-secondary" onClick={demoAdvanceStatus} disabled={!data || loading}>
+          <button
+            className="btn btn-secondary btn-fixed-lg"
+            onClick={demoAdvanceStatus}
+            disabled={!data || loading}
+          >
             Demo: Advance Status
           </button>
 
           <button
-            className="btn btn-primary"
+            className="btn btn-primary btn-fixed-md"
             onClick={() => void onAsk('When will my refund be available?')}
             disabled={!data || asking}
           >

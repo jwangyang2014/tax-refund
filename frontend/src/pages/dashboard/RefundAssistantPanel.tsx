@@ -31,7 +31,11 @@ export default function RefundAssistantPanel(props: {
             if (e.key === 'Enter') onAsk();
           }}
         />
-        <button className="btn btn-primary" onClick={onAsk} disabled={asking || !question.trim()}>
+        <button
+          className="btn btn-primary btn-fixed-sm"
+          onClick={onAsk}
+          disabled={asking || !question.trim()}
+        >
           {asking ? 'Asking...' : 'Ask'}
         </button>
       </div>
@@ -41,7 +45,9 @@ export default function RefundAssistantPanel(props: {
           <div className="spinner" aria-hidden="true" />
           <div>
             <div className="assistant-loading-title">Thinking...</div>
-            <div className="assistant-loading-subtitle">Analyzing your refund status and next steps</div>
+            <div className="assistant-loading-subtitle">
+              Analyzing your refund status and next steps
+            </div>
           </div>
         </div>
       ) : !assistant ? (

@@ -182,15 +182,19 @@ authoritativeData:
             }
         }
 
-        // If the LLM omitted actions, ensure UI still has defaults
-        if (parsed.actions() == null || parsed.actions().isEmpty()) {
-            parsed = new AssistantChatResponse(
-                parsed.answerMarkdown(),
-                parsed.citations() == null ? List.of() : parsed.citations(),
-                actions,
-                parsed.confidence() == null ? Confidence.MEDIUM : parsed.confidence()
-            );
-        }
+        // Always merge LLM actions with server-default actions so key UX actions (e.g. contact support)
+        // are preserved even if the LLM omits them.
+        List<Action> mergedActions = mergeActions(
+            parsed.actions() == null ? List.of() : parsed.actions(),
+            actions
+        );
+
+        parsed = new AssistantChatResponse(
+            parsed.answerMarkdown(),
+            parsed.citations() == null ? List.of() : parsed.citations(),
+            mergedActions,
+            parsed.confidence() == null ? Confidence.MEDIUM : parsed.confidence()
+        );
 
         return parsed;
     }
@@ -262,5 +266,35 @@ authoritativeData:
             "required", List.of("answerMarkdown", "citations", "actions", "confidence")
         ));
         return schema;
+    }
+
+    private static List<Action> mergeActions(List<Action> llmActions, List<Action> defaultActions) {
+        List<Action> out = new ArrayList<>();
+        Set<String> seen = new LinkedHashSet<>();
+
+        // Keep LLM actions first (if any)
+        for (Action a : llmActions) {
+            if (a == null || a.type() == null) continue;
+            String key = a.type().name() + "|" + (a.label() == null ? "" : a.label().trim());
+            if (seen.add(key)) {
+                out.add(a);
+            }
+        }
+
+        // Add server defaults if missing
+        for (Action a : defaultActions) {
+            if (a == null || a.type() == null) continue;
+
+            // Dedup by action type first (prefer LLM wording if same type already exists)
+            boolean sameTypeExists = out.stream().anyMatch(x -> x.type() == a.type());
+            if (sameTypeExists) continue;
+
+            String key = a.type().name() + "|" + (a.label() == null ? "" : a.label().trim());
+            if (seen.add(key)) {
+                out.add(a);
+            }
+        }
+
+        return out;
     }
 }
