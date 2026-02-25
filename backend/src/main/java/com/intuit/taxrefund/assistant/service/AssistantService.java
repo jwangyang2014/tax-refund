@@ -79,7 +79,7 @@ public class AssistantService {
 
         // For assistant calls, no correlationId needed; pass null
         RefundStatusResponse refund = refundService.getLatestRefundStatus(principal, null);
-        AssistantPlan plan = planner.plan(prev, intent, refund.status());
+        AssistantPlan plan = planner.plan(prev, intent, r.confidence(), refund.status());
 
         log.info("assistant_plan userId={} intent={} refundStatus={} nextState={}",
             userId, intent, refund.status(), plan.nextState());
@@ -140,16 +140,6 @@ authoritativeData:
 
             log.info("assistant_llm_call_ok userId={} provider={} chars={}",
                 userId, primary.provider(), json == null ? 0 : json.length());
-
-            System.out.println("***************************");
-            System.out.println("***************************");
-            System.out.println("***************************");
-            System.out.println("***************************");
-            System.out.println("***************************");
-            System.out.println("***************************");
-            System.out.println("***************************");
-            System.out.println("***************************");
-            System.out.println("***************************LLM response JSON: " + json);
 
         } catch (Exception e) {
             log.error("assistant_llm_call_failed userId={} provider={} err={}",

@@ -25,11 +25,6 @@ public class AssistantController {
     @PostMapping("/chat")
     public AssistantChatResponse chat(Authentication auth, @Valid @RequestBody AssistantChatRequest req) {
         JwtService.JwtPrincipal principal = (JwtService.JwtPrincipal) auth.getPrincipal();
-        try {
-            return assistantService.answer(principal, req.question());
-        } catch (Exception e) {
-            log.error("assistant_chat_failed userId={} err={}", principal.userId(), e.toString());
-            return assistantService.answer(principal, "Show me my latest refund status and ETA.");
-        }
+        return assistantService.answer(principal, req.question());
     }
 }

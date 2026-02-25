@@ -5,10 +5,12 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 
 @Component
 public class AssistantQuotaService {
+    private static final ZoneId QUOTA_ZONE = ZoneId.of("America/Los_Angeles");
 
     private final StringRedisTemplate redis;
 
@@ -17,12 +19,12 @@ public class AssistantQuotaService {
     }
 
     public boolean tryConsumeDaily(long userId, int dailyLimit) {
-        String day = LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE); // YYYYMMDD
+        String day = LocalDate.now(QUOTA_ZONE).format(DateTimeFormatter.BASIC_ISO_DATE); // YYYYMMDD
         String key = "llm:quota:" + day + ":u:" + userId;
 
         Long n = redis.opsForValue().increment(key);
         if (n != null && n == 1L) {
-            // expire a little after day ends
+            // Keep a bit longer than a day to survive timezone/day rollover safely
             redis.expire(key, Duration.ofHours(26));
         }
 
