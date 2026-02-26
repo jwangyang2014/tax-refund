@@ -110,7 +110,7 @@ app:
       sameSite: Lax # important since we disabled CSRF
 
 ai:
-  provider: ${AI_PROVIDER:mock}   # mock | openai
+  llmProvider: ${LLM_PROVIDER:mock}   # mock | openai
   openai:
     apiKey: ${OPENAI_API_KEY:}
     model: ${OPENAI_MODEL:gpt-4o-mini}

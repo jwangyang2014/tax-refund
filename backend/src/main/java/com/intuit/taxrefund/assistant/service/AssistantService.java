@@ -84,11 +84,11 @@ public class AssistantService {
         log.info("assistant_plan userId={} intent={} refundStatus={} nextState={}",
             userId, intent, refund.status(), plan.nextState());
 
-        var citations = plan.includePolicySnippets()
+        List<AssistantChatResponse.Citation> citations = plan.includePolicySnippets()
             ? policySnippets.forStatus(refund.status())
             : List.<AssistantChatResponse.Citation>of();
 
-        var actions = buildActions(refund);
+        List<Action> actions = buildActions(refund);
 
         stateStore.set(userId, plan.nextState());
 

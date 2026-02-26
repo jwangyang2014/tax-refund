@@ -1,6 +1,5 @@
 package com.intuit.taxrefund.llm;
 
-import com.intuit.taxrefund.llm.OpenAiLlmClient;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -17,7 +16,7 @@ public class LlmClientRouter {
     }
 
     public LlmClient primary() {
-        AiProvider p = AiProvider.from(props.provider());
+        LlmProvider p = LlmProvider.from(props.llmProvider());
         return switch (p) {
             case OPENAI -> openai;
             case GEMINI -> mock; // until implemented

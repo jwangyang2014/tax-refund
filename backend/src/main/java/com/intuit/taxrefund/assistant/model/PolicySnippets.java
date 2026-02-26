@@ -10,7 +10,6 @@ import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
-import java.util.stream.Collectors;
 
 @Component
 public class PolicySnippets {
@@ -50,7 +49,7 @@ public class PolicySnippets {
                 .comparingInt(PolicySnippetRecord::priority)
                 .thenComparing(PolicySnippetRecord::id))
             .limit(5) // keep prompt payload tight
-            .collect(Collectors.toList());
+            .toList();
     }
 
     private static String normalizeStatus(String s) {
