@@ -1,9 +1,12 @@
 package com.intuit.taxrefund.auth.controller;
 
+import com.intuit.taxrefund.auth.AuthPrincipalSupport;
 import com.intuit.taxrefund.auth.CookieService;
 import com.intuit.taxrefund.auth.controller.dto.LoginRequest;
+import com.intuit.taxrefund.auth.controller.dto.SessionResponse;
 import com.intuit.taxrefund.auth.controller.dto.RegisterRequest;
 import com.intuit.taxrefund.auth.controller.dto.TokenResponse;
+import com.intuit.taxrefund.auth.jwt.JwtService;
 import com.intuit.taxrefund.auth.service.AuthService;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
@@ -12,6 +15,7 @@ import jakarta.validation.Valid;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -21,10 +25,21 @@ public class AuthController {
 
     private final AuthService authService;
     private final CookieService cookieService;
+    private final AuthPrincipalSupport authPrincipalSupport;
 
-    public AuthController(AuthService authService, CookieService cookieService) {
+    public AuthController(
+        AuthService authService,
+        CookieService cookieService,
+        AuthPrincipalSupport authPrincipalSupport) {
         this.authService = authService;
         this.cookieService = cookieService;
+        this.authPrincipalSupport = authPrincipalSupport;
+    }
+
+    @GetMapping("/session")
+    public SessionResponse session(Authentication auth) {
+        JwtService.JwtPrincipal principal = authPrincipalSupport.requirePrincipal(auth);
+        return new SessionResponse(principal.userId(), principal.email(), principal.role());
     }
 
     @PostMapping("/register")

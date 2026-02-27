@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { logout, me } from "./api/authApi";
+import { logout, getSession } from "./api/authApi";
 import { AUTH_EXPIRED_EVENT } from "./authEvents";
 import ErrorBanner from "./components/ErrorBanner";
 import LoginPage from "./pages/LoginPage";
@@ -42,7 +42,7 @@ export default function App() {
 
     (async () => {
       try {
-        await me(); // silent auth check
+        await getSession(); // silent auth check
         if (!mounted) return;
         setError(null);
         setTab('refund');

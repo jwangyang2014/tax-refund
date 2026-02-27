@@ -1,6 +1,5 @@
 package com.intuit.taxrefund.profile.controller;
 
-import com.intuit.taxrefund.auth.controller.dto.MeResponse;
 import com.intuit.taxrefund.auth.jwt.JwtService;
 import com.intuit.taxrefund.profile.dto.ChangePasswordRequest;
 import com.intuit.taxrefund.profile.dto.ProfileResponse;
@@ -20,12 +19,6 @@ public class ProfileController {
 
     public ProfileController(ProfileService profileService) {
         this.profileService = profileService;
-    }
-
-    @GetMapping("/me")
-    public MeResponse me(Authentication auth) {
-        JwtService.JwtPrincipal principal = requirePrincipal(auth);
-        return new MeResponse(principal.userId(), principal.email(), principal.role());
     }
 
     @GetMapping

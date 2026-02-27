@@ -1,6 +1,6 @@
 package com.intuit.taxrefund.auth.controller.dto;
 
-public record MeResponse(
+public record SessionResponse(
         Long userId,
         String email,
         String password

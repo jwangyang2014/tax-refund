@@ -40,8 +40,8 @@ export async function logout(): Promise<void> {
   setAccessToken(null);
 }
 
-export async function me(): Promise<MeResponse> {
-  const res = await apiFetch('/api/profile/me');
+export async function getSession(): Promise<MeResponse> {
+  const res = await apiFetch('/api/auth/session');
   if (!res.ok) throw new Error(await readApiError(res));
   return (await res.json()) as MeResponse;
 }
