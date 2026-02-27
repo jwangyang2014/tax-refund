@@ -1,4 +1,3 @@
-// src/pages/ProfilePage.tsx
 import React, { useEffect, useMemo, useState } from "react";
 import { getProfile, updateProfile } from "../api/profileApi";
 import type { UserProfile } from "../api/types";
@@ -24,7 +23,7 @@ function Field(props: {
   );
 }
 
-export default function ProfilePage({ onError }: { onError: (msg: string) => void }) {
+export default function ProfilePage({ onError }: { onError: (msg: string | null) => void }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
@@ -42,6 +41,8 @@ export default function ProfilePage({ onError }: { onError: (msg: string) => voi
     (async () => {
       setLoading(true);
       setSavedMsg(null);
+      onError(null);
+
       try {
         const p = await getProfile();
         setProfile(p);
@@ -51,6 +52,7 @@ export default function ProfilePage({ onError }: { onError: (msg: string) => voi
         setCity(p.city ?? "");
         setState((p.state ?? "").toUpperCase());
         setPhone(p.phone ?? "");
+        onError(null);
       } catch (e: unknown) {
         onError(errorMessage(e));
       } finally {
@@ -77,6 +79,7 @@ export default function ProfilePage({ onError }: { onError: (msg: string) => voi
 
     setSaving(true);
     setSavedMsg(null);
+    onError(null);
 
     try {
       const updated = await updateProfile({
@@ -90,11 +93,17 @@ export default function ProfilePage({ onError }: { onError: (msg: string) => voi
 
       setProfile(updated);
       setSavedMsg("Profile updated successfully.");
+      onError(null);
     } catch (e: unknown) {
       onError(errorMessage(e));
     } finally {
       setSaving(false);
     }
+  }
+
+  function clearBannerError() {
+    onError(null);
+    if (savedMsg) setSavedMsg(null);
   }
 
   if (loading) {
@@ -128,7 +137,10 @@ export default function ProfilePage({ onError }: { onError: (msg: string) => voi
             id="profile-firstName"
             className="input"
             value={firstName}
-            onChange={(e) => setFirstName(e.target.value)}
+            onChange={(e) => {
+              clearBannerError();
+              setFirstName(e.target.value);
+            }}
           />
         </Field>
 
@@ -137,7 +149,10 @@ export default function ProfilePage({ onError }: { onError: (msg: string) => voi
             id="profile-lastName"
             className="input"
             value={lastName}
-            onChange={(e) => setLastName(e.target.value)}
+            onChange={(e) => {
+              clearBannerError();
+              setLastName(e.target.value);
+            }}
           />
         </Field>
 
@@ -146,7 +161,10 @@ export default function ProfilePage({ onError }: { onError: (msg: string) => voi
             id="profile-address"
             className="input"
             value={address}
-            onChange={(e) => setAddress(e.target.value)}
+            onChange={(e) => {
+              clearBannerError();
+              setAddress(e.target.value);
+            }}
           />
         </Field>
 
@@ -155,7 +173,10 @@ export default function ProfilePage({ onError }: { onError: (msg: string) => voi
             id="profile-city"
             className="input"
             value={city}
-            onChange={(e) => setCity(e.target.value)}
+            onChange={(e) => {
+              clearBannerError();
+              setCity(e.target.value);
+            }}
           />
         </Field>
 
@@ -165,7 +186,10 @@ export default function ProfilePage({ onError }: { onError: (msg: string) => voi
             className="input"
             maxLength={2}
             value={state}
-            onChange={(e) => setState(e.target.value.toUpperCase())}
+            onChange={(e) => {
+              clearBannerError();
+              setState(e.target.value.toUpperCase());
+            }}
           />
         </Field>
 
@@ -174,7 +198,10 @@ export default function ProfilePage({ onError }: { onError: (msg: string) => voi
             id="profile-phone"
             className="input"
             value={phone}
-            onChange={(e) => setPhone(e.target.value)}
+            onChange={(e) => {
+              clearBannerError();
+              setPhone(e.target.value);
+            }}
           />
         </Field>
 

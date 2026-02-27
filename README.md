@@ -1,3 +1,6 @@
+# TO DO
+- Redirect to login page if authentication failed
+
 # How to run
 ## Option A: Docker compose (recommended for your onsite demo)
 ```bash

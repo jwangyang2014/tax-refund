@@ -21,7 +21,7 @@ import {
 export default function DashboardPage({
   onError
 }: {
-  onError: (msg: string) => void;
+  onError: (msg: string | null) => void;
 }) {
   const [data, setData] = useState<RefundStatusResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -32,9 +32,12 @@ export default function DashboardPage({
 
   const load = useCallback(async () => {
     setLoading(true);
+    onError(null);
+
     try {
       const latest = await getLatestRefund();
       setData(latest);
+      onError(null);
     } catch (err: unknown) {
       onError(errorMessage(err));
     } finally {
@@ -50,6 +53,7 @@ export default function DashboardPage({
     if (!data) return;
 
     const next = nextStatus(data.status);
+    onError(null);
 
     try {
       await simulateRefundUpdate({
@@ -60,6 +64,7 @@ export default function DashboardPage({
       });
 
       await load();
+      onError(null);
     } catch (e: unknown) {
       onError(errorMessage(e));
     }
@@ -70,12 +75,14 @@ export default function DashboardPage({
     if (!finalQuestion) return;
 
     setQuestion(finalQuestion);
-    setAssistant(null); // remove old response while loading
+    setAssistant(null);
     setAsking(true);
+    onError(null);
 
     try {
       const resp = await askAssistant(finalQuestion);
       setAssistant(resp);
+      onError(null);
     } catch (e: unknown) {
       onError(errorMessage(e));
     } finally {
@@ -85,17 +92,20 @@ export default function DashboardPage({
 
   function handleAction(a: AssistantResponse['actions'][number]) {
     if (a.type === 'REFRESH') {
+      onError(null);
       void load();
       return;
     }
 
     if (a.type === 'SHOW_TRACKING') {
+      onError(null);
       const el = document.getElementById('refund-details-card');
       el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       return;
     }
 
     if (a.type === 'CONTACT_SUPPORT') {
+      onError(null);
       const subject = encodeURIComponent('Refund Help');
       const body = encodeURIComponent(
         `Hi Support,\n\nI need help with my refund status.\n\nStatus: ${data?.status ?? 'Unknown'}\nTax Year: ${data?.taxYear ?? 'Unknown'}\nLast Updated: ${data?.lastUpdatedAt ?? 'Unknown'}\n\nThanks.`
@@ -104,7 +114,6 @@ export default function DashboardPage({
       return;
     }
 
-    // Fallback so unknown action never becomes a dead click
     onError('This suggested action is not wired yet in this demo.');
   }
 

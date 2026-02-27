@@ -16,7 +16,7 @@ export default function App() {
   const [tab, setTab] = useState<MainTab>('refund');
   const [error, setError] = useState<string | null>(null);
 
-  const handleError = useCallback((message: string) => {
+  const handleError = useCallback((message: string | null) => {
     setError(message);
   }, []);
 
@@ -93,7 +93,6 @@ export default function App() {
           ) : null}
         </header>
 
-        {/* show banner only after boot */}
         <ErrorBanner message={error} />
 
         {screen === 'login' && (
@@ -111,7 +110,10 @@ export default function App() {
                 role="tab"
                 aria-selected={tab === 'refund'}
                 className={`tab-btn ${tab === 'refund' ? 'active' : ''}`}
-                onClick={() => setTab('refund')}
+                onClick={() => {
+                  setError(null);
+                  setTab('refund');
+                }}
               >
                 Refund Status
               </button>
@@ -119,7 +121,10 @@ export default function App() {
                 role="tab"
                 aria-selected={tab === 'profile'}
                 className={`tab-btn ${tab === 'profile' ? 'active' : ''}`}
-                onClick={() => setTab('profile')}
+                onClick={() => {
+                  setError(null);
+                  setTab('profile');
+                }}
               >
                 Profile
               </button>
@@ -127,7 +132,10 @@ export default function App() {
                 role="tab"
                 aria-selected={tab === 'security'}
                 className={`tab-btn ${tab === 'security' ? 'active' : ''}`}
-                onClick={() => setTab('security')}
+                onClick={() => {
+                  setError(null);
+                  setTab('security');
+                }}
               >
                 Security
               </button>
