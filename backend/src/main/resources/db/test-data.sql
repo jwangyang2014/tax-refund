@@ -7,6 +7,21 @@
 6. creates realistic event progressions, filing dates, amounts, and timings
 
 A practical note: this script deletes and recreates refund_record and refund_status_event rows for the seeded users for tax years 2020–2025 so you can rerun it.
+
+Seed realistic refund history + outbox + ETA predictions for:
+- existing user id = 2
+- 14 generated users
+
+Workflow:
+1) run this script once
+2) call ML /train
+3) update seed_model.model_version below to actual /model/info version
+4) rerun this script
+
+Notes:
+- Safe to rerun: deletes/recreates seeded refund data for 2020–2025
+- Seeds outbox_event as already processed (realistic historical pipeline)
+- Seeds refund_eta_prediction with model_name/model_version aligned to your ML service
 */
 
 BEGIN;
@@ -15,6 +30,8 @@ SELECT setseed(0.4242);
 
 DROP TABLE IF EXISTS seed_users;
 DROP TABLE IF EXISTS refund_seed;
+DROP TABLE IF EXISTS latest_status_event;
+DROP TABLE IF EXISTS seed_model;
 
 -- =========================================================
 -- 0) Ensure user id = 2 exists
@@ -25,6 +42,15 @@ BEGIN
         RAISE EXCEPTION 'app_user with id=2 does not exist';
     END IF;
 END $$;
+
+-- =========================================================
+-- 0.5) Model info for refund_eta_prediction
+--      Replace model_version AFTER /train + /model/info
+-- =========================================================
+CREATE TEMP TABLE seed_model AS
+SELECT
+    'gbrt'::varchar AS model_name,
+    '20260227T162154Z'::varchar AS model_version;
 
 -- =========================================================
 -- 1) Add 14 users, reusing password_hash from app_user.id = 2
@@ -102,9 +128,21 @@ WHERE id = 2
    );
 
 -- =========================================================
--- 3) Rerunnable cleanup:
---    delete only seeded users’ refund data for 2020-2025
+-- 3) Rerunnable cleanup for seeded users / years
 -- =========================================================
+DELETE FROM refund_eta_prediction rep
+USING seed_users su
+WHERE rep.user_id = su.id
+  AND rep.tax_year BETWEEN 2020 AND 2025;
+
+DELETE FROM outbox_event oe
+USING seed_users su
+WHERE (
+    (oe.payload->>'userId')::bigint = su.id
+    AND (oe.payload->>'taxYear')::int BETWEEN 2020 AND 2025
+)
+OR oe.aggregate_key LIKE su.id::text || ':%';
+
 DELETE FROM refund_status_event rse
 USING seed_users su
 WHERE rse.user_id = su.id
@@ -280,5 +318,154 @@ SELECT
     END
 FROM refund_seed rs
 ORDER BY rs.user_id, rs.tax_year;
+
+-- =========================================================
+-- 7) Latest status event per user/year
+--    Used to seed realistic processed outbox rows
+-- =========================================================
+CREATE TEMP TABLE latest_status_event AS
+SELECT DISTINCT ON (rse.user_id, rse.tax_year)
+    rse.user_id,
+    rse.tax_year,
+    rse.filing_state,
+    rse.to_status AS status,
+    rse.expected_amount,
+    rse.irs_tracking_id,
+    rse.occurred_at
+FROM refund_status_event rse
+JOIN seed_users su
+  ON su.id = rse.user_id
+WHERE rse.tax_year BETWEEN 2020 AND 2025
+ORDER BY rse.user_id, rse.tax_year, rse.occurred_at DESC;
+
+-- =========================================================
+-- 8) Seed outbox_event
+--    Historical rows are already processed
+-- =========================================================
+INSERT INTO outbox_event (
+    event_type,
+    aggregate_key,
+    payload,
+    created_at,
+    processed_at,
+    attempts,
+    last_error
+)
+SELECT
+    'REFUND_STATUS_UPDATED',
+    lse.user_id::text || ':' || lse.tax_year::text,
+    jsonb_build_object(
+        'userId', lse.user_id,
+        'taxYear', lse.tax_year,
+        'filingState', lse.filing_state,
+        'status', lse.status,
+        'expectedAmount', lse.expected_amount,
+        'trackingId', lse.irs_tracking_id
+    ),
+    lse.occurred_at + interval '2 minutes',
+    lse.occurred_at + interval '2 minutes' + make_interval(secs => (5 + floor(random() * 90))::int),
+    0,
+    NULL
+FROM latest_status_event lse
+ORDER BY lse.user_id, lse.tax_year;
+
+-- =========================================================
+-- 9) Seed refund_eta_prediction
+--
+-- Logic:
+-- - AVAILABLE -> eta_days = 0
+-- - Historical AVAILABLE paths -> exact remaining days from each status event
+-- - Current non-terminal / rejected paths -> plausible heuristic estimates
+--
+-- model_name/model_version come from seed_model
+-- IMPORTANT: replace model_version after /train + /model/info
+-- =========================================================
+WITH available_targets AS (
+    SELECT
+        rse.user_id,
+        rse.tax_year,
+        max(CASE WHEN rse.to_status = 'AVAILABLE' THEN rse.occurred_at END) AS available_at
+    FROM refund_status_event rse
+    JOIN seed_users su
+      ON su.id = rse.user_id
+    WHERE rse.tax_year BETWEEN 2020 AND 2025
+    GROUP BY rse.user_id, rse.tax_year
+),
+latest_by_status AS (
+    SELECT DISTINCT ON (rse.user_id, rse.tax_year, rse.to_status)
+        rse.user_id,
+        rse.tax_year,
+        rse.filing_state,
+        rse.to_status AS status,
+        rse.expected_amount,
+        rse.occurred_at
+    FROM refund_status_event rse
+    JOIN seed_users su
+      ON su.id = rse.user_id
+    WHERE rse.tax_year BETWEEN 2020 AND 2025
+      AND rse.to_status IN ('RECEIVED', 'PROCESSING', 'APPROVED', 'SENT', 'AVAILABLE')
+    ORDER BY rse.user_id, rse.tax_year, rse.to_status, rse.occurred_at DESC
+),
+prediction_base AS (
+    SELECT
+        lbs.user_id,
+        lbs.tax_year,
+        lbs.filing_state,
+        lbs.status,
+        lbs.expected_amount,
+        lbs.occurred_at,
+        at.available_at,
+        CASE
+            WHEN lbs.status = 'AVAILABLE' THEN 0
+
+            -- exact remaining days for cases that eventually became AVAILABLE
+            WHEN at.available_at IS NOT NULL THEN
+                GREATEST(
+                    0,
+                    CEIL(EXTRACT(EPOCH FROM (at.available_at - lbs.occurred_at)) / 86400.0)::int
+                )
+
+            -- heuristic fallback for current non-terminal 2025 rows without actual AVAILABLE yet
+            WHEN lbs.status = 'SENT' THEN 2 + CASE WHEN lbs.filing_state IN ('CA','NY') THEN 1 ELSE 0 END
+            WHEN lbs.status = 'APPROVED' THEN 5 + CASE WHEN lbs.expected_amount > 2000 THEN 2 ELSE 0 END
+            WHEN lbs.status = 'PROCESSING' THEN 10 + CASE WHEN lbs.filing_state IN ('CA','NY','IL') THEN 2 ELSE 0 END
+            WHEN lbs.status = 'RECEIVED' THEN 16 + CASE WHEN lbs.expected_amount > 2000 THEN 3 ELSE 0 END
+            ELSE 0
+        END AS eta_days
+    FROM latest_by_status lbs
+    LEFT JOIN available_targets at
+      ON at.user_id = lbs.user_id
+     AND at.tax_year = lbs.tax_year
+)
+INSERT INTO refund_eta_prediction (
+    user_id,
+    tax_year,
+    status,
+    eta_days,
+    estimated_available_at,
+    model_name,
+    model_version,
+    features,
+    created_at
+)
+SELECT
+    pb.user_id,
+    pb.tax_year,
+    pb.status,
+    pb.eta_days,
+    pb.occurred_at + make_interval(days => pb.eta_days),
+    sm.model_name,
+    sm.model_version,
+    jsonb_build_object(
+        'status', pb.status,
+        'filing_state', COALESCE(pb.filing_state, 'NA'),
+        'expected_amount', pb.expected_amount,
+        'dow', EXTRACT(DOW FROM pb.occurred_at)::int,
+        'month', EXTRACT(MONTH FROM pb.occurred_at)::int
+    ),
+    pb.occurred_at + interval '3 minutes'
+FROM prediction_base pb
+CROSS JOIN seed_model sm
+ORDER BY pb.user_id, pb.tax_year, pb.status;
 
 COMMIT;
