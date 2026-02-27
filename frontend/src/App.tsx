@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { logout, me } from "./api/authApi";
+import { AUTH_EXPIRED_EVENT } from "./authEvents";
 import ErrorBanner from "./components/ErrorBanner";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
@@ -56,6 +57,20 @@ export default function App() {
 
     return () => {
       mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    function handleAuthExpired() {
+      setError("Your session has expired. Please log in again.");
+      setTab('refund');
+      setScreen('login');
+    }
+
+    window.addEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired);
+
+    return () => {
+      window.removeEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired);
     };
   }, []);
 
