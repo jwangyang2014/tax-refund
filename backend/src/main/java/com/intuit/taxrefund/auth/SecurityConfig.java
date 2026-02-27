@@ -84,7 +84,8 @@ public class SecurityConfig {
             status,
             error,
             message,
-            path
+            path,
+            null
         );
 
         objectMapper.writeValue(res.getOutputStream(), body);

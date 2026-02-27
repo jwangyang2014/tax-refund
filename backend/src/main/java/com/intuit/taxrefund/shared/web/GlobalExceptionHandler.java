@@ -4,6 +4,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.http.HttpStatus;
+import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -11,6 +12,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -20,7 +23,6 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(IllegalArgumentException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ApiError badRequest(IllegalArgumentException ex, HttpServletRequest req) {
-        // Expected client error -> WARN (no stack trace)
         log.warn("bad_request path={} method={} msg={}",
             req.getRequestURI(), req.getMethod(), safeMsg(ex.getMessage()));
 
@@ -29,30 +31,35 @@ public class GlobalExceptionHandler {
             400,
             "Bad Request",
             ex.getMessage(),
-            req.getRequestURI()
+            req.getRequestURI(),
+            null
         );
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ApiError validation(MethodArgumentNotValidException ex, HttpServletRequest req) {
-        String msg = ex.getBindingResult()
-            .getAllErrors()
-            .stream()
-            .findFirst()
-            .map(e -> e.getDefaultMessage())
-            .orElse("Validation error");
+        Map<String, String> fieldErrors = new LinkedHashMap<>();
 
-        // Expected client error -> WARN (no stack trace)
-        log.warn("validation_failed path={} method={} msg={}",
-            req.getRequestURI(), req.getMethod(), safeMsg(msg));
+        for (FieldError fe : ex.getBindingResult().getFieldErrors()) {
+            // Keep first error per field to avoid noisy duplicates
+            fieldErrors.putIfAbsent(fe.getField(), fe.getDefaultMessage());
+        }
+
+        String msg = fieldErrors.isEmpty()
+            ? "Validation error"
+            : "Validation failed for " + fieldErrors.size() + " field(s)";
+
+        log.warn("validation_failed path={} method={} fieldErrors={}",
+            req.getRequestURI(), req.getMethod(), fieldErrors);
 
         return new ApiError(
             Instant.now(),
             400,
             "Bad Request",
             msg,
-            req.getRequestURI()
+            req.getRequestURI(),
+            fieldErrors
         );
     }
 
@@ -70,30 +77,29 @@ public class GlobalExceptionHandler {
             400,
             "Bad Request",
             msg,
-            req.getRequestURI()
+            req.getRequestURI(),
+            Map.of(ex.getName(), "Invalid value")
         );
     }
 
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public ApiError serverError(Exception ex, HttpServletRequest req) {
-        // Unexpected server error -> ERROR with stack trace
         log.error("server_error path={} method={} errType={} msg={}",
             req.getRequestURI(), req.getMethod(), ex.getClass().getSimpleName(), safeMsg(ex.getMessage()), ex);
 
-        // For prod we might return a generic message; for demo keep ex.getMessage()
         return new ApiError(
             Instant.now(),
             500,
             "Internal Server Error",
             ex.getMessage(),
-            req.getRequestURI()
+            req.getRequestURI(),
+            null
         );
     }
 
     private static String safeMsg(String msg) {
         if (msg == null) return "";
-        // very lightweight redaction (optional). Add patterns later if needed.
         if (msg.toLowerCase().contains("token")) return "[redacted]";
         return msg;
     }

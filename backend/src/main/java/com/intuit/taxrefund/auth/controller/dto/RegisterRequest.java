@@ -22,6 +22,6 @@ public record RegisterRequest(
     @Pattern(regexp = "^[A-Za-z]{2}$", message = "state must be a 2-letter code")
     String state,
 
-    @NotBlank @Size(max = 30) String phone
+    @Size(max = 30) String phone
 ) {
 }
