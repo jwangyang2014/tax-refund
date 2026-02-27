@@ -1,0 +1,78 @@
+name: frontend-cd
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend-cd.yml'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  build-and-upload:
+    runs-on: ubuntu-latest
+
+    env:
+      CI: "true"
+      VITE_API_BASE_URL: "/api"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform init
+        working-directory: gcp
+        run: terraform init
+
+      - name: Read Terraform outputs
+        id: tf
+        working-directory: gcp
+        run: |
+          echo "bucket=$(terraform output -raw frontend_bucket_name)" >> $GITHUB_OUTPUT
+          echo "url_map=$(terraform output -raw url_map_name)" >> $GITHUB_OUTPUT
+
+      - name: Upload frontend assets
+        run: |
+          gcloud storage rsync frontend/build "gs://${{ steps.tf.outputs.bucket }}" --recursive --delete
+
+      - name: Make index.html non-cacheable
+        run: |
+          gcloud storage objects update "gs://${{ steps.tf.outputs.bucket }}/index.html" \
+            --cache-control="no-cache,max-age=0,must-revalidate"
+
+      - name: Invalidate CDN cache
+        run: |
+          gcloud compute url-maps invalidate-cdn-cache "${{ steps.tf.outputs.url_map }}" \
+            --path "/*" \
+            --global \
+            --quiet

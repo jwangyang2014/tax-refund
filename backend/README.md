@@ -14,19 +14,66 @@ mvnw.cmd
 .mvn/
 ```
 
-# Run the application
+# Build and run ML service
+```bash
+# from repo root
+# Prepare env (IMPORTANT)
+cd backend
+set -a
+source .env
+set +a
+
+# build and run
+docker-compose build ml
+docker-compose up -d ml
+
+# Check health
+curl http://localhost:8000/health
+curl http://localhost:8000/model/info
+
+# Train
+curl -s -X POST http://localhost:8000/train
+curl -s http://localhost:8000/model/info
+
+# Check logs
+docker compose logs -n 200 ml
+
+# Stop
+docker-compose down ml
+```
+
+# Run the application - backend
 
 From the project root:
 ```bash
-./mvnw -v
+cd backend
 set -a      # turn on auto-export
 source .env # load variables
 set +a      # turn off auto-export
+
+cd ..
 docker-compose up -d ml # run ML docker
+
+cd backend
 ./mvnw clean spring-boot:run
 ```
+The server starts on http://localhost:8080.
 
-The app starts on http://localhost:8080.
+To test
+```bash
+./mvnw test
+```
+
+# Run the application - frond end
+```bash
+cd frontend
+npm run dev
+```
+
+To test
+```bash
+npm run test
+```
 
 # Test the endpoints (curl)
 ## Register
@@ -146,34 +193,6 @@ redis-cli info keyspace
 
 # List keys
 redis-cli --scan
-```
-
-# Build and run ML service
-```bash
-# from repo root
-# Prepare env (IMPORTANT)
-cd backend
-set -a
-source .env
-set +a
-
-# build and run
-docker-compose build ml
-docker-compose up -d ml
-
-# Check health
-curl http://localhost:8000/health
-curl http://localhost:8000/model/info
-
-# Train
-curl -s -X POST http://localhost:8000/train
-curl -s http://localhost:8000/model/info
-
-# Check logs
-docker compose logs -n 200 ml
-
-# Stop
-docker-compose down ml
 ```
 
 # Open AI test

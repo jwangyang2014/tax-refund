@@ -1,0 +1,71 @@
+name: backend-cd
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-cd.yml'
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  IMAGE_TAG: ${{ github.sha }}
+
+jobs:
+  build-test-push-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Run backend tests
+        run: mvn -B -f backend/pom.xml test
+
+      - name: Package backend
+        run: mvn -B -f backend/pom.xml package -DskipTests
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker "${{ vars.GCP_PRIMARY_REGION }}-docker.pkg.dev" --quiet
+
+      - name: Build Docker image
+        run: |
+          IMAGE="${{ vars.GCP_PRIMARY_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.ARTIFACT_REPO }}/${{ vars.SERVICE_NAME }}:${IMAGE_TAG}"
+          docker build -t "${IMAGE}" backend
+          echo "IMAGE=${IMAGE}" >> $GITHUB_ENV
+
+      - name: Push Docker image
+        run: docker push "${IMAGE}"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform init
+        working-directory: gcp
+        run: terraform init
+
+      - name: Terraform apply backend image update
+        working-directory: gcp
+        run: |
+          terraform apply -auto-approve \
+            -var-file=terraform.tfvars \
+            -var="artifact_image_tag=${IMAGE_TAG}"
