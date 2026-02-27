@@ -151,7 +151,14 @@ redis-cli --scan
 # Build and run ML service
 ```bash
 # from repo root
-docker-compose build
+# Prepare env (IMPORTANT)
+cd backend
+set -a
+source .env
+set +a
+
+# build and run
+docker-compose build ml
 docker-compose up -d ml
 
 # Check health

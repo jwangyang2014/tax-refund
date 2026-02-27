@@ -45,25 +45,36 @@ engine = create_engine(DB_URL, pool_pre_ping=True)
 
 def build_training_frame(limit=200000):
     # Target: remaining days until AVAILABLE from each event row
-    q = text(f"""
-      with ev as (
+    q = text("""
+    with ev as (
         select
-          user_id, tax_year, filing_state, to_status as status, expected_amount,
-          occurred_at,
-          max(case when to_status='AVAILABLE' then occurred_at end) over (partition by user_id, tax_year) as available_at
+        user_id,
+        tax_year,
+        filing_state,
+        to_status as status,
+        expected_amount,
+        occurred_at AT TIME ZONE 'UTC' as occurred_at,
+        max(
+            case when to_status = 'AVAILABLE'
+            then occurred_at AT TIME ZONE 'UTC'
+            end
+        ) over (partition by user_id, tax_year) as available_at
         from refund_status_event
-      )
-      select
-        user_id, tax_year, filing_state, status,
+    )
+    select
+        user_id,
+        tax_year,
+        filing_state,
+        status,
         coalesce(expected_amount, 0) as expected_amount,
         extract(epoch from (available_at - occurred_at))/86400.0 as days_to_available,
         occurred_at
-      from ev
-      where available_at is not null
+    from ev
+    where available_at is not null
         and occurred_at is not null
         and extract(epoch from (available_at - occurred_at)) >= 0
-      order by occurred_at desc
-      limit :limit
+    order by occurred_at desc
+    limit :limit
     """)
     df = pd.read_sql(q, engine, params={"limit": limit})
     if df.empty:
@@ -73,8 +84,9 @@ def build_training_frame(limit=200000):
     df["expected_amount"] = df["expected_amount"].astype(float)
     df["days_to_available"] = df["days_to_available"].astype(float)
     # Optional seasonality
-    df["dow"] = pd.to_datetime(df["occurred_at"]).dt.dayofweek
-    df["month"] = pd.to_datetime(df["occurred_at"]).dt.month
+    df["occurred_at"] = pd.to_datetime(df["occurred_at"], utc=True)
+    df["dow"] = df["occurred_at"].dt.dayofweek
+    df["month"] = df["occurred_at"].dt.month
 
     return df
 
