@@ -54,7 +54,13 @@ describe('DashboardPage', () => {
     render(<DashboardPage onError={onError} />);
 
     await expectStatus('PROCESSING');
-    expect(onError).not.toHaveBeenCalled();
+
+    // success path clears errors with null; it should not report a real error
+    expect(onError).not.toHaveBeenCalledWith('Failed to load');
+    expect(onError).not.toHaveBeenCalledWith(expect.any(String));
+
+    // optional: verify only null was used
+    expect(onError.mock.calls.every(([arg]) => arg === null)).toBe(true);
   });
 
   it('shows usability guidance for current status', async () => {

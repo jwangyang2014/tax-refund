@@ -1,12 +1,13 @@
 package com.intuit.taxrefund.auth.controller;
 
-import com.intuit.taxrefund.shared.web.GlobalExceptionHandler;
+import com.intuit.taxrefund.auth.AuthPrincipalSupport;
 import com.intuit.taxrefund.auth.CookieService;
 import com.intuit.taxrefund.auth.controller.dto.LoginRequest;
 import com.intuit.taxrefund.auth.jwt.JwtService;
 import com.intuit.taxrefund.auth.service.AuthService;
 import com.intuit.taxrefund.shared.ratelimit.RateLimitProps;
 import com.intuit.taxrefund.shared.ratelimit.RedisRateLimiter;
+import com.intuit.taxrefund.shared.web.GlobalExceptionHandler;
 import jakarta.servlet.http.HttpServletResponse;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -30,17 +31,28 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Import(GlobalExceptionHandler.class)     // so 400 becomes JSON, not an exception
 class AuthControllerTest {
 
-  @Autowired MockMvc mvc;
+  @Autowired
+  MockMvc mvc;
 
-  @MockBean AuthService authService;
-  @MockBean CookieService cookieService;
+  @MockBean
+  AuthService authService;
+
+  @MockBean
+  CookieService cookieService;
+
+  @MockBean
+  AuthPrincipalSupport authPrincipalSupport;   // <-- added fix
 
   // Optional when addFilters=false, but keeping it is fine.
-  @MockBean JwtService jwtService;
+  @MockBean
+  JwtService jwtService;
 
-  // ✅ Added: satisfy RateLimitFilter constructor deps even in @WebMvcTest slice
-  @MockBean RateLimitProps rateLimitProps;
-  @MockBean RedisRateLimiter redisRateLimiter;
+  // Satisfy RateLimitFilter constructor deps even in @WebMvcTest slice
+  @MockBean
+  RateLimitProps rateLimitProps;
+
+  @MockBean
+  RedisRateLimiter redisRateLimiter;
 
   @Test
   void login_setsRefreshCookie_andReturnsAccessToken() throws Exception {
