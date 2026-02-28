@@ -19,7 +19,6 @@ public class PasswordPolicy {
             if (!Character.isLetterOrDigit(ch)) hasSymbol = true;
         }
 
-        IntStream passwordChars = password.chars();
         if (!hasUpper || !hasLower || !hasDigit || !hasSymbol) {
             throw new IllegalArgumentException("Password must include upper, lower, digit, and symbol");
         }

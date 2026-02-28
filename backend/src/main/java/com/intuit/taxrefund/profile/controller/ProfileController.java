@@ -1,29 +1,30 @@
 package com.intuit.taxrefund.profile.controller;
 
+import com.intuit.taxrefund.auth.AuthPrincipalSupport;
 import com.intuit.taxrefund.auth.jwt.JwtService;
 import com.intuit.taxrefund.profile.dto.ChangePasswordRequest;
 import com.intuit.taxrefund.profile.dto.ProfileResponse;
 import com.intuit.taxrefund.profile.dto.UpdateProfileRequest;
 import com.intuit.taxrefund.profile.service.ProfileService;
 import jakarta.validation.Valid;
-import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.*;
 import org.springframework.security.core.Authentication;
-import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/profile")
 public class ProfileController {
 
     private final ProfileService profileService;
+    private final AuthPrincipalSupport authPrincipalSupport;
 
-    public ProfileController(ProfileService profileService) {
+    public ProfileController(ProfileService profileService, AuthPrincipalSupport authPrincipalSupport) {
         this.profileService = profileService;
+        this.authPrincipalSupport = authPrincipalSupport;
     }
 
     @GetMapping
     public ProfileResponse getProfile(Authentication auth) {
-        JwtService.JwtPrincipal principal = requirePrincipal(auth);
+        JwtService.JwtPrincipal principal = authPrincipalSupport.requirePrincipal(auth);
         return profileService.getProfile(principal.userId());
     }
 
@@ -32,7 +33,7 @@ public class ProfileController {
         Authentication auth,
         @Valid @RequestBody UpdateProfileRequest req
     ) {
-        JwtService.JwtPrincipal principal = requirePrincipal(auth);
+        JwtService.JwtPrincipal principal = authPrincipalSupport.requirePrincipal(auth);
         return profileService.updateProfile(principal.userId(), req);
     }
 
@@ -41,14 +42,7 @@ public class ProfileController {
         Authentication auth,
         @Valid @RequestBody ChangePasswordRequest req
     ) {
-        JwtService.JwtPrincipal principal = requirePrincipal(auth);
+        JwtService.JwtPrincipal principal = authPrincipalSupport.requirePrincipal(auth);
         profileService.changePassword(principal.userId(), req);
-    }
-
-    private JwtService.JwtPrincipal requirePrincipal(Authentication auth) {
-        if (auth == null || !(auth.getPrincipal() instanceof JwtService.JwtPrincipal principal)) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Not authenticated");
-        }
-        return principal;
     }
 }

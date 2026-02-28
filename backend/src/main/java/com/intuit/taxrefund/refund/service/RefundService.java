@@ -55,10 +55,7 @@ public class RefundService {
                 return cached;
             }
 
-            RefreshedRefundView refreshed = refreshLatestRefundForUser(userId);
-
-            RefundStatusResponse response = toResponse(refreshed);
-
+            RefundStatusResponse response = refreshLatestRefundForUser(userId);
             tryWriteLatestRefundToCache(cacheKey, userId, response);
 
             success = true;
@@ -72,19 +69,20 @@ public class RefundService {
      * Reusable orchestration: fetch latest IRS status and reconcile it into local DB.
      * Future scheduler / polling job can reuse this directly.
      */
-    public RefreshedRefundView refreshLatestRefundForUser(Long userId) {
+    private RefundStatusResponse refreshLatestRefundForUser(Long userId) {
         IrsAdapter.IrsRefundResult irsResult = fetchLatestFromIrs(userId);
 
         RefundSyncService.ReconciledRefundView reconciled =
             refundSyncService.reconcileLatestRefundFromIrs(userId, irsResult);
 
-        return new RefreshedRefundView(
+        return new RefundStatusResponse(
             reconciled.taxYear(),
             reconciled.status(),
             reconciled.lastUpdatedAt(),
             reconciled.expectedAmount(),
             reconciled.trackingId(),
-            reconciled.estimatedAvailableAt()
+            reconciled.estimatedAvailableAt(),
+            null
         );
     }
 
@@ -95,18 +93,6 @@ public class RefundService {
             log.error("irs_fetch_failed userId={} err={}", userId, e.toString());
             throw e;
         }
-    }
-
-    private RefundStatusResponse toResponse(RefreshedRefundView view) {
-        return new RefundStatusResponse(
-            view.taxYear(),
-            view.status(),
-            view.lastUpdatedAt(),
-            view.expectedAmount(),
-            view.trackingId(),
-            view.estimatedAvailableAt(),
-            null
-        );
     }
 
     private String latestRefundCacheKey(Long userId) {
@@ -146,13 +132,4 @@ public class RefundService {
             log.warn("refund_access_audit_write_failed userId={} err={}", userId, e.toString());
         }
     }
-
-    public record RefreshedRefundView(
-        Integer taxYear,
-        String status,
-        java.time.Instant lastUpdatedAt,
-        java.math.BigDecimal expectedAmount,
-        String trackingId,
-        java.time.Instant estimatedAvailableAt
-    ) {}
 }

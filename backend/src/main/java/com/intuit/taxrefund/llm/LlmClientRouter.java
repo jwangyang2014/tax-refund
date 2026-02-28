@@ -2,6 +2,8 @@ package com.intuit.taxrefund.llm;
 
 import org.springframework.stereotype.Component;
 
+import java.util.Map;
+
 @Component
 public class LlmClientRouter {
 
@@ -19,20 +21,22 @@ public class LlmClientRouter {
         LlmProvider p = LlmProvider.from(props.llmProvider());
         return switch (p) {
             case OPENAI -> openai;
-            case GEMINI -> mock; // until implemented
+            case GEMINI -> mock; // placeholder until implemented
             default -> mock;
         };
     }
 
-    public String callWithFallback(String developerPrompt, String userPrompt, java.util.Map<String, Object> schema) {
+    public String callWithFallback(String developerPrompt, String userPrompt, Map<String, Object> schema) {
         LlmClient primary = primary();
+
         if (primary.isAvailable()) {
             try {
                 return primary.generateStructuredJson(developerPrompt, userPrompt, schema);
             } catch (Exception ignored) {
-                // fall through
+                // fall through to mock
             }
         }
+
         return mock.generateStructuredJson(developerPrompt, userPrompt, schema);
     }
 }

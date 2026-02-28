@@ -18,12 +18,11 @@ public class CorsConfig {
         // Dev only, change in production environment
         config.setAllowedOrigins(List.of("http://localhost:5173"));
 
-        // because you use refresh cookies
+        // we use refresh cookies
         config.setAllowCredentials(true);
 
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("Authorization", "Content-Type"));
-        config.setExposedHeaders(List.of("Set-Cookie"));
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);

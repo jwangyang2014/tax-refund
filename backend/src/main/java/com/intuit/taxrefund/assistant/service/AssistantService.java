@@ -14,7 +14,6 @@ import com.intuit.taxrefund.assistant.nlp.IntentClassifier;
 import com.intuit.taxrefund.auth.jwt.JwtService;
 import com.intuit.taxrefund.llm.LlmClient;
 import com.intuit.taxrefund.llm.LlmClientRouter;
-import com.intuit.taxrefund.llm.MockLlmClient;
 import com.intuit.taxrefund.refund.controller.dto.RefundStatusResponse;
 import com.intuit.taxrefund.refund.service.RefundService;
 import org.apache.logging.log4j.LogManager;
@@ -38,7 +37,6 @@ public class AssistantService {
     private final PolicySnippets policySnippets;
 
     private final LlmClientRouter llmRouter;
-    private final MockLlmClient mockLlm; // used for richer mock fallback (optional)
     private final ObjectMapper om;
 
     public AssistantService(
@@ -51,7 +49,6 @@ public class AssistantService {
         ConversationStateStore stateStore,
         PolicySnippets policySnippets,
         LlmClientRouter llmRouter,
-        MockLlmClient mockLlm,
         ObjectMapper om
     ) {
         this.refundService = refundService;
@@ -63,7 +60,6 @@ public class AssistantService {
         this.stateStore = stateStore;
         this.policySnippets = policySnippets;
         this.llmRouter = llmRouter;
-        this.mockLlm = mockLlm;
         this.om = om;
     }
 
@@ -77,7 +73,6 @@ public class AssistantService {
         log.info("assistant_intent userId={} intent={} confidence={} model={}",
             userId, r.intent(), r.confidence(), r.model());
 
-        // For assistant calls, no correlationId needed; pass null
         RefundStatusResponse refund = refundService.getLatestRefundStatus(principal, null);
         AssistantPlan plan = planner.plan(prev, intent, r.confidence(), refund.status());
 
@@ -86,13 +81,12 @@ public class AssistantService {
 
         List<AssistantChatResponse.Citation> citations = plan.includePolicySnippets()
             ? policySnippets.forStatus(refund.status())
-            : List.<AssistantChatResponse.Citation>of();
+            : List.of();
 
         List<Action> actions = buildActions(refund);
 
         stateStore.set(userId, plan.nextState());
 
-        // Build authoritative data for LLM / mock fallback
         Map<String, Object> authoritativeData = privacyFilter.buildAuthoritativeDataForLlm(refund);
         authoritativeData.put("policies", citations);
 
@@ -113,21 +107,28 @@ authoritativeData:
 %s
 """.formatted(question, safeJson(authoritativeData));
 
-        // Decide primary provider from configuration
         LlmClient primary = llmRouter.primary();
 
         log.info("assistant_llm_primary userId={} provider={} model={} available={}",
             userId, primary.provider(), primary.model(), primary.isAvailable());
 
-        // If primary is not available, skip quota and fall back to mock immediately
         if (!primary.isAvailable() || "mock".equalsIgnoreCase(primary.provider())) {
-            return mockLlm.buildMockAssistantResponse(question, refund, citations, actions);
+            return parseOrFallback(
+                llmRouter.callWithFallback(developerPrompt, userPrompt, schema),
+                actions,
+                userId,
+                primary.provider()
+            );
         }
 
-        // Daily quota for cost control (only for real providers)
         if (!quota.tryConsumeDaily(userId, props.dailyOpenAiCallsPerUser())) {
             log.warn("assistant_quota_exceeded userId={}", userId);
-            return mockLlm.buildMockAssistantResponse(question, refund, citations, actions);
+            return parseOrFallback(
+                llmRouter.callWithFallback(developerPrompt, userPrompt, schema),
+                actions,
+                userId,
+                "quota-fallback"
+            );
         }
 
         String json;
@@ -135,7 +136,6 @@ authoritativeData:
             log.info("assistant_llm_call_start userId={} provider={} model={} intent={}",
                 userId, primary.provider(), primary.model(), intent);
 
-            // Router will fall back to mock JSON if primary throws
             json = llmRouter.callWithFallback(developerPrompt, userPrompt, schema);
 
             log.info("assistant_llm_call_ok userId={} provider={} chars={}",
@@ -144,23 +144,37 @@ authoritativeData:
         } catch (Exception e) {
             log.error("assistant_llm_call_failed userId={} provider={} err={}",
                 userId, primary.provider(), e.toString());
-            return mockLlm.buildMockAssistantResponse(question, refund, citations, actions);
+
+            return buildDeterministicFallback(question, refund, citations, actions);
         }
 
+        AssistantChatResponse parsed = parseOrFallback(json, actions, userId, primary.provider());
+        if (parsed == null) {
+            return buildDeterministicFallback(question, refund, citations, actions);
+        }
+
+        return parsed;
+    }
+
+    private AssistantChatResponse parseOrFallback(
+        String json,
+        List<Action> defaultActions,
+        long userId,
+        String provider
+    ) {
         AssistantChatResponse parsed;
         try {
             parsed = parseStrict(json);
         } catch (Exception e) {
             log.warn("assistant_llm_bad_output userId={} provider={} err={}",
-                userId, primary.provider(), e.toString());
-            return mockLlm.buildMockAssistantResponse(question, refund, citations, actions);
+                userId, provider, e.toString());
+            return null;
         }
 
         if (parsed == null) {
-            return mockLlm.buildMockAssistantResponse(question, refund, citations, actions);
+            return null;
         }
 
-        // If parsed answerMarkdown is blank for any reason, use the raw JSON field.
         if (parsed.answerMarkdown() == null || parsed.answerMarkdown().isBlank()) {
             try {
                 String rawAnswer = om.readTree(json).path("answerMarkdown").asText("");
@@ -168,34 +182,54 @@ authoritativeData:
                     parsed = new AssistantChatResponse(
                         rawAnswer,
                         parsed.citations() == null ? List.of() : parsed.citations(),
-                        parsed.actions() == null ? actions : parsed.actions(),
+                        parsed.actions() == null ? defaultActions : parsed.actions(),
                         parsed.confidence() == null ? Confidence.MEDIUM : parsed.confidence()
                     );
                 } else {
-                    return mockLlm.buildMockAssistantResponse(question, refund, citations, actions);
+                    return null;
                 }
             } catch (Exception e) {
-                log.warn("assistant_llm_answer_recovery_failed userId={} errType={} err={}",
-                    userId, e.getClass().getSimpleName(), e.toString());
-                return mockLlm.buildMockAssistantResponse(question, refund, citations, actions);
+                log.warn("assistant_llm_answer_recovery_failed userId={} provider={} errType={} err={}",
+                    userId, provider, e.getClass().getSimpleName(), e.toString());
+                return null;
             }
         }
 
-        // Always merge LLM actions with server-default actions so key UX actions (e.g. contact support)
-        // are preserved even if the LLM omits them.
         List<Action> mergedActions = mergeActions(
             parsed.actions() == null ? List.of() : parsed.actions(),
-            actions
+            defaultActions
         );
 
-        parsed = new AssistantChatResponse(
+        return new AssistantChatResponse(
             parsed.answerMarkdown(),
             parsed.citations() == null ? List.of() : parsed.citations(),
             mergedActions,
             parsed.confidence() == null ? Confidence.MEDIUM : parsed.confidence()
         );
+    }
 
-        return parsed;
+    private AssistantChatResponse buildDeterministicFallback(
+        String question,
+        RefundStatusResponse refund,
+        List<AssistantChatResponse.Citation> citations,
+        List<Action> actions
+    ) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("**Your question:** ").append(question).append("\n\n")
+            .append("**Latest refund status:** ").append(refund.status()).append("\n")
+            .append("**Tax year:** ").append(refund.taxYear()).append("\n")
+            .append("**Last updated:** ").append(refund.lastUpdatedAt()).append("\n");
+
+        if (refund.availableAtEstimated() != null && !com.intuit.taxrefund.refund.model.RefundStatus.AVAILABLE.name().equals(refund.status())) {
+            sb.append("**Estimated availability:** ").append(refund.availableAtEstimated()).append("\n");
+        }
+
+        Confidence c = refund.availableAtEstimated() != null ? Confidence.MEDIUM : Confidence.LOW;
+        if (com.intuit.taxrefund.refund.model.RefundStatus.AVAILABLE.name().equals(refund.status())) {
+            c = Confidence.HIGH;
+        }
+
+        return new AssistantChatResponse(sb.toString(), citations, actions, c);
     }
 
     private AssistantChatResponse parseStrict(String json) {
@@ -223,8 +257,11 @@ authoritativeData:
     }
 
     private String safeJson(Object o) {
-        try { return om.writerWithDefaultPrettyPrinter().writeValueAsString(o); }
-        catch (Exception e) { return "{}"; }
+        try {
+            return om.writerWithDefaultPrettyPrinter().writeValueAsString(o);
+        } catch (Exception e) {
+            return "{}";
+        }
     }
 
     private Map<String, Object> responseSchema() {
@@ -271,7 +308,6 @@ authoritativeData:
         List<Action> out = new ArrayList<>();
         Set<String> seen = new LinkedHashSet<>();
 
-        // Keep LLM actions first (if any)
         for (Action a : llmActions) {
             if (a == null || a.type() == null) continue;
             String key = a.type().name() + "|" + (a.label() == null ? "" : a.label().trim());
@@ -280,11 +316,9 @@ authoritativeData:
             }
         }
 
-        // Add server defaults if missing
         for (Action a : defaultActions) {
             if (a == null || a.type() == null) continue;
 
-            // Dedup by action type first (prefer LLM wording if same type already exists)
             boolean sameTypeExists = out.stream().anyMatch(x -> x.type() == a.type());
             if (sameTypeExists) continue;
 

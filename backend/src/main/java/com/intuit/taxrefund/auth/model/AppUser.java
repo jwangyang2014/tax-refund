@@ -115,8 +115,6 @@ public class AppUser {
         this.id = id;
     }
 
-// Add these methods to AppUser.java
-
     public void setFirstName(String firstName) {
         this.firstName = firstName;
     }
