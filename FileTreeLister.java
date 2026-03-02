@@ -6,19 +6,22 @@ import java.util.stream.Stream;
 
 /**
  * Prints a directory tree for the current working directory, showing only files
- * that match supported extensions.
+ * that match supported extensions, with some explicit include/exclude rules.
+ *
+ * Rules:
+ * 1. Exclude:
+ *    - FileTreeLister.java
+ *    - .DS_Store
+ *    - *.d.ts
+ *    - anything under dist or node_modules
+ *
+ * 2. Always include:
+ *    - Dockerfile
+ *    - any file under a path containing a "resources" directory
  *
  * Defaults to Java only: {"java"}
  * You can pass extensions as args (without dots), e.g.:
- *   java FileTreeLister ts tsx java
- *
- * Example output:
- * .
- * ├── src
- * │   ├── App.tsx
- * │   └── Main.java
- * └── test
- *     └── FooTest.java
+ *   java FileTreeLister ts tsx java tf md
  */
 public class FileTreeLister {
 
@@ -27,7 +30,10 @@ public class FileTreeLister {
 
   /** If you want a hard-coded "supported list" to validate args against, put it here. */
   public static final Set<String> SUPPORTED_FILE_TYPES =
-      Set.of("java", "ts", "tsx", "js", "jsx", "kt", "py", "go", "cs");
+      Set.of("java", "ts", "tsx", "js", "jsx", "kt", "py", "go", "cs", "json", "yml", "xml", "tf");
+
+  private static final Set<String> EXCLUDED_DIR_NAMES = Set.of("dist", "node_modules");
+  private static final Set<String> EXCLUDED_FILE_NAMES = Set.of("FileTreeLister.java", ".DS_Store");
 
   public static void main(String[] args) throws IOException {
     Path root = Paths.get(".").toRealPath();
@@ -35,7 +41,7 @@ public class FileTreeLister {
     Set<String> activeTypes = parseTypes(args);
 
     System.out.println(root.getFileName() == null ? root.toString() : root.getFileName().toString());
-    printTree(root, "", activeTypes);
+    printTree(root, "", activeTypes, root);
   }
 
   private static Set<String> parseTypes(String[] args) {
@@ -49,25 +55,27 @@ public class FileTreeLister {
         .map(String::toLowerCase)
         .collect(Collectors.toCollection(LinkedHashSet::new));
 
-    // Optional: validate against SUPPORTED_FILE_TYPES (ignore unknowns).
     Set<String> active = requested.stream()
         .filter(SUPPORTED_FILE_TYPES::contains)
         .collect(Collectors.toCollection(LinkedHashSet::new));
 
-    // If all args were invalid, fall back to default.
     return active.isEmpty() ? DEFAULT_FILE_TYPES : active;
   }
 
-  private static void printTree(Path dir, String prefix, Set<String> types) throws IOException {
-    if (!Files.isDirectory(dir)) return;
+  private static void printTree(Path dir, String prefix, Set<String> types, Path root) throws IOException {
+    if (!Files.isDirectory(dir) || isExcludedPath(root.relativize(dir))) return;
 
     List<Path> children;
     try (Stream<Path> s = Files.list(dir)) {
       children = s
           .filter(p -> {
             try {
-              if (Files.isDirectory(p)) return containsMatchingFiles(p, types);
-              return isMatchingFile(p, types);
+              Path relative = root.relativize(p);
+
+              if (isExcludedPath(relative)) return false;
+
+              if (Files.isDirectory(p)) return containsMatchingFiles(p, types, root);
+              return isMatchingFile(p, types, root);
             } catch (IOException e) {
               return false; // skip unreadable
             }
@@ -85,21 +93,58 @@ public class FileTreeLister {
       System.out.println(prefix + (last ? "└── " : "├── ") + child.getFileName());
 
       if (Files.isDirectory(child)) {
-        printTree(child, prefix + (last ? "    " : "│   "), types);
+        printTree(child, prefix + (last ? "    " : "│   "), types, root);
       }
     }
   }
 
-  private static boolean isMatchingFile(Path p, Set<String> types) {
+  private static boolean isMatchingFile(Path p, Set<String> types, Path root) {
     if (!Files.isRegularFile(p)) return false;
-    String ext = extensionOf(p.getFileName().toString());
+
+    Path relative = root.relativize(p);
+    String fileName = p.getFileName().toString();
+
+    if (isExcludedPath(relative)) return false;
+    if (EXCLUDED_FILE_NAMES.contains(fileName)) return false;
+    if (fileName.endsWith(".d.ts")) return false;
+
+    // Always include Dockerfile
+    if ("Dockerfile".equals(fileName)) return true;
+
+    // Always include anything under a path containing "resources"
+    if (isUnderResources(relative)) return true;
+
+    String ext = extensionOf(fileName);
     return ext != null && types.contains(ext);
   }
 
-  private static boolean containsMatchingFiles(Path dir, Set<String> types) throws IOException {
+  private static boolean containsMatchingFiles(Path dir, Set<String> types, Path root) throws IOException {
+    Path relativeDir = root.relativize(dir);
+    if (isExcludedPath(relativeDir)) return false;
+
     try (Stream<Path> s = Files.walk(dir)) {
-      return s.anyMatch(p -> isMatchingFile(p, types));
+      return s
+          .filter(p -> !Files.isDirectory(p))
+          .anyMatch(p -> isMatchingFile(p, types, root));
     }
+  }
+
+  private static boolean isExcludedPath(Path relativePath) {
+    for (Path part : relativePath) {
+      if (EXCLUDED_DIR_NAMES.contains(part.toString())) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private static boolean isUnderResources(Path relativePath) {
+    for (Path part : relativePath) {
+      if ("resources".equals(part.toString())) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private static String extensionOf(String filename) {
