@@ -1,6 +1,9 @@
-import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { vi } from 'vitest';
+import { getLatestRefund, simulateRefundUpdate } from '../api/refundApi';
+import { askAssistant } from '../api/assistantApi';
+import DashboardPage from '../pages/DashboardPage';
+import type { RefundStatusResponse } from '../api/types';
 
 vi.mock('../api/refundApi', () => ({
   getLatestRefund: vi.fn(),
@@ -10,11 +13,6 @@ vi.mock('../api/refundApi', () => ({
 vi.mock('../api/assistantApi', () => ({
   askAssistant: vi.fn()
 }));
-
-import { getLatestRefund, simulateRefundUpdate } from '../api/refundApi';
-import { askAssistant } from '../api/assistantApi';
-import DashboardPage from '../pages/DashboardPage';
-import type { RefundStatusResponse } from '../api/types';
 
 const mockGetLatestRefund = vi.mocked(getLatestRefund);
 const mockSimulateRefundUpdate = vi.mocked(simulateRefundUpdate);
