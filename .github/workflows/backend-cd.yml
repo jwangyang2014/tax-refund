@@ -1,8 +1,16 @@
 name: backend-cd
 
+# Triggers:
+#   - Push to main or develop that touches backend code or this workflow
+# Flow:
+#   1. Build & test the Spring Boot app
+#   2. Build & push Docker image to Artifact Registry (tagged with git SHA)
+#   3. Deploy to Staging via Terraform
+#   4. On main branch only: promote the same image tag to Production (requires approval)
+
 on:
   push:
-    branches: [ main ]
+    branches: [ main, develop ]
     paths:
       - 'backend/**'
       - '.github/workflows/backend-cd.yml'
@@ -14,28 +22,34 @@ permissions:
 env:
   IMAGE_TAG: ${{ github.sha }}
 
+# ── Build, test, push, deploy to staging ────────────────────────────────────
 jobs:
-  build-test-push-deploy:
+  build-and-deploy-staging:
+    name: Build → Test → Push → Deploy (Staging)
     runs-on: ubuntu-latest
+    environment: staging
+
+    outputs:
+      image_tag: ${{ env.IMAGE_TAG }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Java
+      - name: Setup Java 17
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
           cache: maven
 
-      - name: Run backend tests
+      - name: Run backend unit tests
         run: mvn -B -f backend/pom.xml test
 
-      - name: Package backend
+      - name: Package backend (skip tests – already ran above)
         run: mvn -B -f backend/pom.xml package -DskipTests
 
-      - name: Authenticate to Google Cloud
+      - name: Authenticate to Google Cloud (staging)
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
@@ -44,6 +58,11 @@ jobs:
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
 
+      # Configure Docker to push to Artifact Registry in the staging project.
+      # vars.GCP_PRIMARY_REGION e.g. "us-central1"
+      # vars.GCP_PROJECT_ID     e.g. "taxrefund-staging"
+      # vars.ARTIFACT_REPO      e.g. "taxrefund"
+      # vars.SERVICE_NAME       e.g. "taxrefund-backend"
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker "${{ vars.GCP_PRIMARY_REGION }}-docker.pkg.dev" --quiet
 
@@ -53,19 +72,75 @@ jobs:
           docker build -t "${IMAGE}" backend
           echo "IMAGE=${IMAGE}" >> $GITHUB_ENV
 
-      - name: Push Docker image
+      - name: Push Docker image to Artifact Registry
         run: docker push "${IMAGE}"
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
-      - name: Terraform init
+      - name: Terraform init (staging)
         working-directory: gcp
-        run: terraform init
+        run: |
+          # MANUAL STEP: TF_STATE_BUCKET must be set in the "staging" GitHub Environment.
+          # e.g. gs://taxrefund-staging-tfstate
+          terraform init \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="prefix=terraform/state"
 
-      - name: Terraform apply backend image update
+      - name: Terraform apply – update backend image (staging)
         working-directory: gcp
         run: |
           terraform apply -auto-approve \
-            -var-file=terraform.tfvars \
+            -var-file=terraform.staging.tfvars \
+            -var="artifact_image_tag=${IMAGE_TAG}"
+
+  # ── Promote to production ────────────────────────────────────────────────────
+  deploy-prod:
+    name: Deploy (Production)
+    runs-on: ubuntu-latest
+    needs: build-and-deploy-staging
+    # Only promote to prod on pushes to main, never on develop.
+    if: github.ref == 'refs/heads/main'
+
+    # The "prod" GitHub Environment should have "Required reviewers" configured
+    # in Settings → Environments → prod so a human must approve.
+    environment: prod
+
+    env:
+      IMAGE_TAG: ${{ needs.build-and-deploy-staging.outputs.image_tag }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud (prod)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      # In production the image lives in the prod project's Artifact Registry.
+      # IMPORTANT: The Docker image must be copied (or re-pushed) to the prod registry
+      # before this step runs. If you use a single shared registry, update the image path accordingly.
+      - name: Configure Docker for Artifact Registry (prod)
+        run: gcloud auth configure-docker "${{ vars.GCP_PRIMARY_REGION }}-docker.pkg.dev" --quiet
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform init (prod)
+        working-directory: gcp
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="prefix=terraform/state"
+
+      - name: Terraform apply – update backend image (prod)
+        working-directory: gcp
+        run: |
+          terraform apply -auto-approve \
+            -var-file=terraform.prod.tfvars \
             -var="artifact_image_tag=${IMAGE_TAG}"

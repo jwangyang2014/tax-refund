@@ -1,12 +1,18 @@
 name: terraform
 
+# Triggers:
+#   - Pull requests targeting main: run fmt + validate + plan for BOTH environments
+#   - Push to main: apply staging first, then prod (requires manual approval for prod)
+#   - Push to develop branch: apply staging only
+
 on:
   pull_request:
+    branches: [ main ]
     paths:
       - 'gcp/**'
       - '.github/workflows/terraform.yml'
   push:
-    branches: [ main ]
+    branches: [ main, develop ]
     paths:
       - 'gcp/**'
       - '.github/workflows/terraform.yml'
@@ -15,9 +21,15 @@ permissions:
   contents: read
   id-token: write
 
+# ── Staging job ─────────────────────────────────────────────────────────────
 jobs:
-  terraform:
+  terraform-staging:
+    name: Terraform – Staging
     runs-on: ubuntu-latest
+
+    # Use the "staging" GitHub Environment (Settings → Environments → staging)
+    # Add GCP_WORKLOAD_IDENTITY_PROVIDER and GCP_SERVICE_ACCOUNT as environment variables there.
+    environment: staging
 
     defaults:
       run:
@@ -27,7 +39,65 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Authenticate to Google Cloud
+      - name: Authenticate to Google Cloud (staging)
+        uses: google-github-actions/auth@v2
+        with:
+          # These vars come from the "staging" GitHub Environment.
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform fmt check
+        run: terraform fmt -check -recursive
+
+      - name: Terraform init (staging)
+        run: |
+          # Each environment uses its own GCS bucket for remote state to avoid state collisions.
+          # MANUAL STEP: Create the bucket before first run:
+          #   gsutil mb -p taxrefund-staging -l us-central1 gs://taxrefund-staging-tfstate
+          #   gsutil versioning set on gs://taxrefund-staging-tfstate
+          terraform init \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="prefix=terraform/state"
+
+      - name: Terraform validate
+        run: terraform validate
+
+      - name: Terraform plan (staging)
+        run: terraform plan -var-file=terraform.staging.tfvars -out=tfplan-staging
+
+      - name: Terraform apply (staging)
+        # Apply on push to main OR develop; skip on PRs (plan only).
+        if: github.event_name == 'push'
+        run: terraform apply -auto-approve tfplan-staging
+
+  # ── Production job ───────────────────────────────────────────────────────────
+  terraform-prod:
+    name: Terraform – Production
+    runs-on: ubuntu-latest
+    # Only run on push to main (not develop) and only after staging succeeds.
+    needs: terraform-staging
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    # Use the "prod" GitHub Environment.
+    # Configure "Required reviewers" in Settings → Environments → prod
+    # so a human must approve before this job runs.
+    environment: prod
+
+    defaults:
+      run:
+        working-directory: gcp
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud (prod)
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
@@ -39,19 +109,20 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
-      - name: Terraform fmt
-        run: terraform fmt -check -recursive
-
-      - name: Terraform init
-        run: terraform init
+      - name: Terraform init (prod)
+        run: |
+          # MANUAL STEP: Create the prod state bucket before first run:
+          #   gsutil mb -p taxrefund-prod -l us-central1 gs://taxrefund-prod-tfstate
+          #   gsutil versioning set on gs://taxrefund-prod-tfstate
+          terraform init \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="prefix=terraform/state"
 
       - name: Terraform validate
         run: terraform validate
 
-      - name: Terraform plan
-        if: github.event_name == 'pull_request'
-        run: terraform plan -var-file=terraform.tfvars
+      - name: Terraform plan (prod)
+        run: terraform plan -var-file=terraform.prod.tfvars -out=tfplan-prod
 
-      - name: Terraform apply
-        if: github.event_name == 'push'
-        run: terraform apply -auto-approve -var-file=terraform.tfvars
+      - name: Terraform apply (prod)
+        run: terraform apply -auto-approve tfplan-prod

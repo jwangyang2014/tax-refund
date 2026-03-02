@@ -1,8 +1,15 @@
 name: frontend-cd
 
+# Triggers:
+#   - Push to main or develop that touches frontend code or this workflow
+# Flow:
+#   1. Build the React app (Vite)
+#   2. Deploy to Staging GCS bucket + invalidate CDN
+#   3. On main branch only: promote the same build to Production (requires approval)
+
 on:
   push:
-    branches: [ main ]
+    branches: [ main, develop ]
     paths:
       - 'frontend/**'
       - '.github/workflows/frontend-cd.yml'
@@ -11,19 +18,27 @@ permissions:
   contents: read
   id-token: write
 
+# ── Build & deploy to staging ────────────────────────────────────────────────
 jobs:
-  build-and-upload:
+  build-and-deploy-staging:
+    name: Build → Deploy (Staging)
     runs-on: ubuntu-latest
+    environment: staging
 
     env:
       CI: "true"
+      # The API base URL is a relative path so the load balancer rewrites /api → Cloud Run.
       VITE_API_BASE_URL: "/api"
+
+    outputs:
+      # Pass the build artifact path to the prod job via upload/download.
+      build_artifact: frontend-build-${{ github.sha }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Setup Node 20
         uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -34,11 +49,20 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      - name: Build frontend
+      - name: Build frontend (staging)
         working-directory: frontend
-        run: npm run build
+        # VITE_ENV can be used in the app to show "staging" banners etc.
+        run: VITE_ENV=staging npm run build
 
-      - name: Authenticate to Google Cloud
+      # Upload build so the prod job can deploy the exact same artifact.
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build-${{ github.sha }}
+          path: frontend/dist
+          retention-days: 3
+
+      - name: Authenticate to Google Cloud (staging)
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
@@ -50,27 +74,104 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
-      - name: Terraform init
+      - name: Terraform init (staging)
         working-directory: gcp
-        run: terraform init
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="prefix=terraform/state"
 
-      - name: Read Terraform outputs
+      - name: Read Terraform outputs (staging)
         id: tf
         working-directory: gcp
         run: |
+          terraform workspace select staging 2>/dev/null || true
           echo "bucket=$(terraform output -raw frontend_bucket_name)" >> $GITHUB_OUTPUT
-          echo "url_map=$(terraform output -raw url_map_name)" >> $GITHUB_OUTPUT
+          echo "url_map=$(terraform output -raw url_map_name)"        >> $GITHUB_OUTPUT
 
-      - name: Upload frontend assets
+      # Sync the Vite output dir (dist) to the GCS bucket.
+      # --delete removes files that no longer exist in the build.
+      - name: Upload frontend assets to GCS (staging)
         run: |
-          gcloud storage rsync frontend/build "gs://${{ steps.tf.outputs.bucket }}" --recursive --delete
+          gcloud storage rsync frontend/dist "gs://${{ steps.tf.outputs.bucket }}" \
+            --recursive --delete
 
-      - name: Make index.html non-cacheable
+      # index.html must not be cached so browsers always get the latest entrypoint.
+      - name: Set index.html as non-cacheable (staging)
         run: |
           gcloud storage objects update "gs://${{ steps.tf.outputs.bucket }}/index.html" \
             --cache-control="no-cache,max-age=0,must-revalidate"
 
-      - name: Invalidate CDN cache
+      - name: Invalidate CDN cache (staging)
+        run: |
+          gcloud compute url-maps invalidate-cdn-cache "${{ steps.tf.outputs.url_map }}" \
+            --path "/*" \
+            --global \
+            --quiet
+
+  # ── Promote to production ────────────────────────────────────────────────────
+  deploy-prod:
+    name: Deploy (Production)
+    runs-on: ubuntu-latest
+    needs: build-and-deploy-staging
+    if: github.ref == 'refs/heads/main'
+
+    # The "prod" GitHub Environment should have "Required reviewers" configured
+    # so a human must approve before these steps execute.
+    environment: prod
+
+    env:
+      CI: "true"
+      VITE_API_BASE_URL: "/api"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Re-use the same build artifact from staging – do not rebuild.
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build-and-deploy-staging.outputs.build_artifact }}
+          path: frontend/dist
+
+      - name: Authenticate to Google Cloud (prod)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform init (prod)
+        working-directory: gcp
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="prefix=terraform/state"
+
+      - name: Read Terraform outputs (prod)
+        id: tf
+        working-directory: gcp
+        run: |
+          echo "bucket=$(terraform output -raw frontend_bucket_name)" >> $GITHUB_OUTPUT
+          echo "url_map=$(terraform output -raw url_map_name)"        >> $GITHUB_OUTPUT
+
+      - name: Upload frontend assets to GCS (prod)
+        run: |
+          gcloud storage rsync frontend/dist "gs://${{ steps.tf.outputs.bucket }}" \
+            --recursive --delete
+
+      - name: Set index.html as non-cacheable (prod)
+        run: |
+          gcloud storage objects update "gs://${{ steps.tf.outputs.bucket }}/index.html" \
+            --cache-control="no-cache,max-age=0,must-revalidate"
+
+      - name: Invalidate CDN cache (prod)
         run: |
           gcloud compute url-maps invalidate-cdn-cache "${{ steps.tf.outputs.url_map }}" \
             --path "/*" \

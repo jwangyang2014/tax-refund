@@ -72,6 +72,16 @@ management:
     sampling:
       probability: ${TRACING_SAMPLE_PROBABILITY:0.1}
 
+  otlp:
+    tracing:
+      # Destination for OTel spans. Injected by Terraform (observability.tf).
+      # Falls back to a local OTLP collector on the standard port so local dev
+      # works without any config change (spans are simply dropped if nothing
+      # is listening there — the app is unaffected).
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+      # Fail fast on a dead collector — do not let the exporter thread stall.
+      timeout: 2s
+
 # --- Logging levels (actual format is in log4j2-spring.xml) ---
 logging:
   level:

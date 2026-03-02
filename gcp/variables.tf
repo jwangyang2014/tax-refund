@@ -173,3 +173,54 @@ variable "deletion_protection" {
   type        = bool
   default     = true
 }
+
+# ---------------------------------------------------------------------------
+# Observability variables (consumed by observability.tf and main.tf)
+# ---------------------------------------------------------------------------
+
+variable "log_retention_days" {
+  type        = number
+  description = "Retention window in days for the dedicated Cloud Logging bucket."
+  default     = 30
+}
+
+variable "ops_alert_email" {
+  type        = string
+  description = "Email address for operational alerts. Replace with a PagerDuty or Slack webhook channel in production."
+  default     = "ops-alerts@example.com"
+}
+
+variable "tracing_sample_probability" {
+  type        = string
+  description = "Fraction of requests sampled for distributed tracing (0.0–1.0). Use 1.0 in dev, 0.1 in prod."
+  default     = "0.1"
+}
+
+variable "otlp_endpoint" {
+  type        = string
+  description = "OTLP HTTP endpoint for OTel span export. Cloud Trace in GCP, or a Jaeger host in staging."
+  default     = "https://cloudtrace.googleapis.com/v1/traces"
+}
+
+# ---------------------------------------------------------------------------
+# Observability variables (originally declared in observability.tf, moved
+# here so all variable declarations are in one place)
+# ---------------------------------------------------------------------------
+
+variable "log_retention_days" {
+  type        = number
+  description = "Retention window (days) for the dedicated Cloud Logging bucket."
+  default     = 30
+}
+
+variable "ops_alert_email" {
+  type        = string
+  description = "E-mail address for operational alerts. Override with a PagerDuty/Slack integration channel."
+  default     = "ops-alerts@example.com"
+}
+
+variable "tracing_sample_probability" {
+  type        = string
+  description = "Fraction of requests to sample for distributed tracing via Cloud Trace (0.0 – 1.0). Use '1.0' in staging, '0.1' in prod."
+  default     = "0.1"
+}

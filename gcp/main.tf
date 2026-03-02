@@ -13,7 +13,10 @@ resource "google_project_service" "services" {
     "artifactregistry.googleapis.com",
     "cloudsql.googleapis.com",
     "compute.googleapis.com",
+    "cloudtrace.googleapis.com",
     "iam.googleapis.com",
+    "logging.googleapis.com",
+    "monitoring.googleapis.com",
     "redis.googleapis.com",
     "run.googleapis.com",
     "secretmanager.googleapis.com",
@@ -334,6 +337,35 @@ resource "google_cloud_run_v2_service" "backend" {
         name  = "APP_RATELIMIT_ENABLED"
         value = "true"
       }
+
+      # -----------------------------------------------------------------------
+      # Observability env vars – consumed by application.yml and log4j2 config
+      # APP_SERVICE_NAME : used as the "service" field in structured JSON logs
+      # APP_ENV          : used as the "env" field in structured JSON logs
+      # TRACING_SAMPLE_PROBABILITY : fraction of requests sampled for Cloud Trace
+      # -----------------------------------------------------------------------
+      env {
+        name  = "APP_SERVICE_NAME"
+        value = local.prefix
+      }
+
+      env {
+        name  = "APP_ENV"
+        value = var.environment
+      }
+
+      env {
+        name  = "TRACING_SAMPLE_PROBABILITY"
+        value = var.tracing_sample_probability
+      }
+
+      env {
+        # OTLP HTTP endpoint – Cloud Run's service account already has
+        # roles/cloudtrace.agent (observability.tf) so no extra auth needed.
+        # Override via TF_VAR_otlp_endpoint for Jaeger / staging collectors.
+        name  = "OTEL_EXPORTER_OTLP_ENDPOINT"
+        value = var.otlp_endpoint
+      }      
     }
   }
 
