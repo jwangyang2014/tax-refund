@@ -154,6 +154,11 @@ jobs:
             -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
             -backend-config="prefix=terraform/state"
 
+      - name: Select Terraform workspace (prod)
+        working-directory: gcp
+        run: |
+          terraform workspace select prod 2>/dev/null || terraform workspace new prod
+
       - name: Read Terraform outputs (prod)
         id: tf
         working-directory: gcp
