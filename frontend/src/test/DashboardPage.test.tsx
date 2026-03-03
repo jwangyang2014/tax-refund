@@ -39,7 +39,7 @@ async function expectStatus(status: RefundStatus) {
   });
 }
 
-describe('DashboardPage', () => {
+describe('Refund StatusPage', () => {
   beforeEach(() => {
     vi.resetAllMocks();
   });

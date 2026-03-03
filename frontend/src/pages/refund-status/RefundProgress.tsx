@@ -8,7 +8,7 @@ export default function RefundProgress(props: {
   const { status, currentStepIdx } = props;
 
   return (
-    <section className="dashboard-card">
+    <section className="refund-status-card">
       <div className="card-title">Refund progress</div>
 
       <div className="progress-pills">

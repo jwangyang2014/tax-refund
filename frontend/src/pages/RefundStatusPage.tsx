@@ -4,11 +4,11 @@ import { askAssistant, type AssistantResponse } from '../api/assistantApi';
 import type { RefundStatusResponse } from '../api/types';
 import { errorMessage } from '../utils';
 
-import RefundStatusBanner from './dashboard/RefundStatusBanner';
-import RefundProgress from './dashboard/RefundProgress';
-import RefundDetailsCard from './dashboard/RefundDetailsCard';
-import RefundGuidancePanel from './dashboard/RefundGuidancePanel';
-import RefundAssistantPanel from './dashboard/RefundAssistantPanel';
+import RefundStatusBanner from './refund-status/RefundStatusBanner';
+import RefundProgress from './refund-status/RefundProgress';
+import RefundDetailsCard from './refund-status/RefundDetailsCard';
+import RefundGuidancePanel from './refund-status/RefundGuidancePanel';
+import RefundAssistantPanel from './refund-status/RefundAssistantPanel';
 import {
   nextStatus,
   formatDateTime,
@@ -16,7 +16,7 @@ import {
   getStatusTone,
   getStatusGuidance,
   getFreshnessLabel
-} from './dashboard/refundStatusMeta';
+} from './refund-status/refundStatusMeta';
 
 export default function RefundStatusPage({
   onError
@@ -123,16 +123,16 @@ export default function RefundStatusPage({
   const currentStepIdx = getStatusStepIndex(data?.status ?? '');
 
   return (
-    <div className="dashboard-page">
-      <div className="dashboard-hero">
+    <div className="refund-status-page">
+      <div className="refund-status-hero">
         <div>
-          <h3 className="dashboard-title">Refund Status</h3>
-          <p className="dashboard-subtitle">
+          <h3 className="refund-status-title">Refund Status</h3>
+          <p className="refund-status-subtitle">
             Check your latest refund status, estimated availability date, and get guided help if something looks delayed.
           </p>
         </div>
 
-        <div className="dashboard-actions">
+        <div className="refund-status-actions">
           <button
             className="btn btn-secondary btn-fixed-md"
             onClick={load}
@@ -169,8 +169,8 @@ export default function RefundStatusPage({
 
       <RefundProgress status={data?.status} currentStepIdx={currentStepIdx} />
 
-      <div className="dashboard-grid">
-        <div className="dashboard-main">
+      <div className="refund-status-grid">
+        <div className="refund-status-main">
           <RefundDetailsCard data={data} />
           {data && (
             <RefundGuidancePanel
@@ -181,7 +181,7 @@ export default function RefundStatusPage({
           )}
         </div>
 
-        <div className="dashboard-side">
+        <div className="refund-status-side">
           <RefundAssistantPanel
             question={question}
             asking={asking}

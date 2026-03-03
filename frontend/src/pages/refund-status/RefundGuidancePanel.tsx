@@ -12,7 +12,7 @@ export default function RefundGuidancePanel(props: {
   const { guidance, asking, onAskQuestion } = props;
 
   return (
-    <section className="dashboard-card">
+    <section className="refund-status-card">
       <h4 className="card-section-title">What this status means</h4>
       <p className="card-paragraph">{guidance.whatItMeans}</p>
 

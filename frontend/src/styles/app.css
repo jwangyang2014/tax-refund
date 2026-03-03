@@ -244,14 +244,14 @@ body {
   }
 }
 
-/* ===== Dashboard ===== */
+/* ===== Refund Status ===== */
 
-.dashboard-page {
+.refund-status-page {
   display: grid;
   gap: 12px;
 }
 
-.dashboard-hero {
+.refund-status-hero {
   display: flex;
   justify-content: space-between;
   gap: 16px;
@@ -259,41 +259,41 @@ body {
   flex-wrap: wrap;
 }
 
-.dashboard-title {
+.refund-status-title {
   margin: 0 0 4px;
   font-size: 20px;
   font-weight: 700;
 }
 
-.dashboard-subtitle {
+.refund-status-subtitle {
   margin: 0;
   color: var(--muted);
   max-width: 760px;
   line-height: 1.4;
 }
 
-.dashboard-actions {
+.refund-status-actions {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
   align-items: center;
 }
 
-.dashboard-grid {
+.refund-status-grid {
   display: grid;
   grid-template-columns: 1.15fr 0.85fr;
   gap: 12px;
   align-items: start;
 }
 
-.dashboard-main,
-.dashboard-side {
+.refund-status-main,
+.refund-status-side {
   display: grid;
   gap: 12px;
 }
 
 /* Shared card look */
-.dashboard-card {
+.refund-status-card {
   background: #fff;
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -635,7 +635,7 @@ body {
 
 /* Responsive */
 @media (max-width: 900px) {
-  .dashboard-grid {
+  .refund-status-grid {
     grid-template-columns: 1fr;
   }
 
@@ -665,7 +665,7 @@ body {
 }
 
 /* Smooth card feel */
-.dashboard-card,
+.refund-status-card,
 .status-banner {
   transition: box-shadow 120ms ease, border-color 120ms ease, background-color 120ms ease;
 }
@@ -778,7 +778,7 @@ body {
 
 /* Prevent jarring UI flicker */
 .btn,
-.dashboard-card,
+.refund-status-card,
 .status-banner {
   transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease, opacity 120ms ease, box-shadow 120ms ease;
 }

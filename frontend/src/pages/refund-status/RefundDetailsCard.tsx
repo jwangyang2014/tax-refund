@@ -4,11 +4,11 @@ import { formatDateTime } from './refundStatusMeta';
 
 export default function RefundDetailsCard({ data }: { data: RefundStatusResponse | null }) {
   if (!data) {
-    return <div className="dashboard-card">No data yet</div>;
+    return <div className="refund-status-card">No data yet</div>;
   }
 
   return (
-    <section id="refund-details-card" className="dashboard-card">
+    <section id="refund-details-card" className="refund-status-card">
       <div className="card-title">Refund details</div>
 
       <div className="details-grid">

@@ -13,7 +13,7 @@ export default function RefundAssistantPanel(props: {
   const { question, asking, assistant, setQuestion, onAsk, onAction } = props;
 
   return (
-    <section className="dashboard-card assistant-card">
+    <section className="refund-status-card assistant-card">
       <h4 className="card-section-title">Ask about your refund</h4>
 
       <p className="card-paragraph muted">
