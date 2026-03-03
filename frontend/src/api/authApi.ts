@@ -1,7 +1,6 @@
-// src/api/authApi.ts
 import { apiFetch, setAccessToken } from "./http";
 import { readApiError } from "./error";
-import type { MeResponse } from "./types";
+import type { SessionResponse } from "./types";
 
 export type RegisterPayload = {
   email: string;
@@ -40,10 +39,10 @@ export async function logout(): Promise<void> {
   setAccessToken(null);
 }
 
-export async function getSession(): Promise<MeResponse> {
+export async function getSession(): Promise<SessionResponse> {
   const res = await apiFetch('/api/auth/session');
   if (!res.ok) throw new Error(await readApiError(res));
-  return (await res.json()) as MeResponse;
+  return (await res.json()) as SessionResponse;
 }
 
 export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {

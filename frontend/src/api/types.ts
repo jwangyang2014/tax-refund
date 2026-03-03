@@ -1,4 +1,3 @@
-// src/api/types.ts
 export type RefundStatusResponse = {
   taxYear: number;
   status: string;
@@ -9,7 +8,7 @@ export type RefundStatusResponse = {
   aiExplanation: string | null;
 };
 
-export type MeResponse = {
+export type SessionResponse = {
   userId: number;
   email: string;
   role: string;
