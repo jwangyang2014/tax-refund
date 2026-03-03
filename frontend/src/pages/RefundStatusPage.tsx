@@ -18,7 +18,7 @@ import {
   getFreshnessLabel
 } from './dashboard/refundStatusMeta';
 
-export default function DashboardPage({
+export default function RefundStatusPage({
   onError
 }: {
   onError: (msg: string | null) => void;

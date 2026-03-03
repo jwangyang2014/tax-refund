@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { vi } from 'vitest';
 import { getLatestRefund, simulateRefundUpdate } from '../api/refundApi';
 import { askAssistant } from '../api/assistantApi';
-import DashboardPage from '../pages/DashboardPage';
+import RefundStatusPage from '../pages/RefundStatusPage';
 import type { RefundStatusResponse } from '../api/types';
 
 vi.mock('../api/refundApi', () => ({
@@ -49,7 +49,7 @@ describe('DashboardPage', () => {
 
     mockGetLatestRefund.mockResolvedValue(makeRefund('PROCESSING'));
 
-    render(<DashboardPage onError={onError} />);
+    render(<RefundStatusPage onError={onError} />);
 
     await expectStatus('PROCESSING');
 
@@ -66,7 +66,7 @@ describe('DashboardPage', () => {
 
     mockGetLatestRefund.mockResolvedValue(makeRefund('PROCESSING'));
 
-    render(<DashboardPage onError={onError} />);
+    render(<RefundStatusPage onError={onError} />);
 
     await expectStatus('PROCESSING');
 
@@ -83,7 +83,7 @@ describe('DashboardPage', () => {
 
     mockGetLatestRefund.mockImplementation(async () => makeRefund(state.status));
 
-    render(<DashboardPage onError={onError} />);
+    render(<RefundStatusPage onError={onError} />);
 
     await expectStatus('RECEIVED');
 
@@ -108,7 +108,7 @@ describe('DashboardPage', () => {
       state.status = payload.status;
     });
 
-    render(<DashboardPage onError={onError} />);
+    render(<RefundStatusPage onError={onError} />);
 
     await expectStatus('RECEIVED');
 
@@ -139,7 +139,7 @@ describe('DashboardPage', () => {
       citations: [{ docId: 'PROCESSING_POLICY', quote: 'Processing may take longer during peak season.' }]
     });
 
-    render(<DashboardPage onError={onError} />);
+    render(<RefundStatusPage onError={onError} />);
 
     await expectStatus('PROCESSING');
 
@@ -169,7 +169,7 @@ describe('DashboardPage', () => {
       citations: []
     });
 
-    render(<DashboardPage onError={onError} />);
+    render(<RefundStatusPage onError={onError} />);
 
     await expectStatus('PROCESSING');
 
@@ -185,7 +185,7 @@ describe('DashboardPage', () => {
 
     mockGetLatestRefund.mockRejectedValue(new Error('Failed to load'));
 
-    render(<DashboardPage onError={onError} />);
+    render(<RefundStatusPage onError={onError} />);
 
     await waitFor(() => {
       expect(onError).toHaveBeenCalledWith('Failed to load');
@@ -198,7 +198,7 @@ describe('DashboardPage', () => {
     mockGetLatestRefund.mockResolvedValue(makeRefund('RECEIVED', { expectedAmount: 10 }));
     mockSimulateRefundUpdate.mockRejectedValue(new Error('Simulation failed'));
 
-    render(<DashboardPage onError={onError} />);
+    render(<RefundStatusPage onError={onError} />);
 
     await expectStatus('RECEIVED');
 
@@ -217,7 +217,7 @@ describe('DashboardPage', () => {
     mockGetLatestRefund.mockResolvedValue(makeRefund('PROCESSING'));
     mockAskAssistant.mockRejectedValue(new Error('Assistant unavailable'));
 
-    render(<DashboardPage onError={onError} />);
+    render(<RefundStatusPage onError={onError} />);
 
     await expectStatus('PROCESSING');
 

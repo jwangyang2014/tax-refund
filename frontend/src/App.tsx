@@ -4,7 +4,7 @@ import { AUTH_EXPIRED_EVENT } from "./authEvents";
 import ErrorBanner from "./components/ErrorBanner";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
-import DashboardPage from "./pages/DashboardPage";
+import RefundStatusPage from "./pages/RefundStatusPage";
 import ProfilePage from "./pages/ProfilePage";
 import SecurityPage from "./pages/SecurityPage";
 import "./styles/app.css";
@@ -157,7 +157,7 @@ export default function App() {
             </div>
 
             <div className="tab-panel">
-              {tab === 'refund' && <DashboardPage onError={handleError} />}
+              {tab === 'refund' && <RefundStatusPage onError={handleError} />}
               {tab === 'profile' && <ProfilePage onError={handleError} />}
               {tab === 'security' && <SecurityPage onError={handleError} />}
             </div>
