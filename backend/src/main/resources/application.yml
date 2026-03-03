@@ -68,7 +68,7 @@ management:
       system: true
 
   tracing:
-    enabled: true
+    enabled: false
     sampling:
       probability: ${TRACING_SAMPLE_PROBABILITY:0.1}
 
