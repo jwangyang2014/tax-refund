@@ -1,0 +1,125 @@
+name: ml-cd
+
+# Triggers:
+#   - Push to main or develop that touches ML code or this workflow.
+# Flow:
+#   1. Build & push the ML Docker image to Artifact Registry (tagged with git SHA).
+#   2. Deploy to Staging via Terraform (ml_artifact_image_tag = git SHA).
+#   3. On main branch only: promote to Production (requires manual approval).
+#
+# NOTE: The ML service does NOT re-train the model on deploy. Training is
+# triggered separately (e.g. POST /train or a scheduled Cloud Scheduler job).
+# Deploy only updates the running container image.
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'ml/**'
+      - '.github/workflows/ml-cd.yml'
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  ML_IMAGE_TAG: ${{ github.sha }}
+
+# ── Build, push, deploy to staging ──────────────────────────────────────────
+jobs:
+  build-and-deploy-staging:
+    name: ML Build → Push → Deploy (Staging)
+    runs-on: ubuntu-latest
+    environment: staging
+
+    outputs:
+      ml_image_tag: ${{ env.ML_IMAGE_TAG }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud (staging)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker "${{ vars.GCP_PRIMARY_REGION }}-docker.pkg.dev" --quiet
+
+      # ML service name follows the same naming convention as the backend:
+      # {environment}-{service_name}-ml  e.g. staging-taxrefund-backend-ml
+      - name: Build ML Docker image
+        run: |
+          ML_SERVICE="${{ vars.ENVIRONMENT }}-${{ vars.SERVICE_NAME }}-ml"
+          ML_IMAGE="${{ vars.GCP_PRIMARY_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.ARTIFACT_REPO }}/${ML_SERVICE}:${ML_IMAGE_TAG}"
+          docker build -t "${ML_IMAGE}" ml/
+          echo "ML_IMAGE=${ML_IMAGE}" >> $GITHUB_ENV
+
+      - name: Push ML Docker image to Artifact Registry
+        run: docker push "${ML_IMAGE}"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform init (staging)
+        working-directory: gcp
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="prefix=terraform/state"
+
+      - name: Terraform apply – update ML image (staging)
+        working-directory: gcp
+        run: |
+          terraform apply -auto-approve \
+            -var-file=terraform.staging.tfvars \
+            -var="ml_artifact_image_tag=${ML_IMAGE_TAG}"
+
+  # ── Promote to production ─────────────────────────────────────────────────
+  deploy-prod:
+    name: ML Deploy (Production)
+    runs-on: ubuntu-latest
+    needs: build-and-deploy-staging
+    if: github.ref == 'refs/heads/main'
+    environment: prod   # requires manual approval (configure in GitHub Environments)
+
+    env:
+      ML_IMAGE_TAG: ${{ needs.build-and-deploy-staging.outputs.ml_image_tag }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud (prod)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry (prod)
+        run: gcloud auth configure-docker "${{ vars.GCP_PRIMARY_REGION }}-docker.pkg.dev" --quiet
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform init (prod)
+        working-directory: gcp
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="prefix=terraform/state"
+
+      - name: Terraform apply – update ML image (prod)
+        working-directory: gcp
+        run: |
+          terraform apply -auto-approve \
+            -var-file=terraform.prod.tfvars \
+            -var="ml_artifact_image_tag=${ML_IMAGE_TAG}"

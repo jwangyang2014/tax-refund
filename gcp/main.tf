@@ -334,6 +334,11 @@ resource "google_cloud_run_v2_service" "backend" {
       }
 
       env {
+        name  = "ML_BASE_URL"
+        value = google_cloud_run_v2_service.ml.uri
+      }
+
+      env {
         name  = "APP_RATELIMIT_ENABLED"
         value = "true"
       }

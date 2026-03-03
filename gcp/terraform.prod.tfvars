@@ -57,6 +57,15 @@ ai_provider = "openai"  # real LLM in prod
 frontend_bucket_location       = "US"
 frontend_cache_max_age_seconds = 3600
 
+# -- ML Service --
+# Keep 1 warm instance in prod to avoid cold-start ETA prediction latency.
+ml_artifact_image_tag = "latest"   # CI/CD overrides this with git SHA
+ml_min_instances      = 1
+ml_max_instances      = 5
+ml_cpu                = "2"        # more CPU for faster sklearn inference under load
+ml_memory             = "2Gi"
+ml_cpu_idle           = false      # keep CPU allocated to avoid throttle on burst
+
 # -- Load balancer domains --
 # MANUAL STEP: Set to your production domains before applying.
 # After apply, point DNS A/AAAA records for these domains to the load_balancer_ip output.
@@ -82,5 +91,5 @@ ops_alert_email = "ops-alerts@example.com"
 tracing_sample_probability = "0.1"
 
 # -- Observability --
-alert_email        = "yourteam@yourdomain.com"  # MANUAL STEP: replace
+alert_email        = "yang@example.com"  # MANUAL STEP: replace
 log_retention_days = 365

@@ -17,11 +17,12 @@ import java.util.stream.Stream;
  *
  * 2. Always include:
  *    - Dockerfile
+ *    - .env
  *    - any file under a path containing a "resources" directory
  *
  * Defaults to Java only: {"java"}
  * You can pass extensions as args (without dots), e.g.:
- *   java FileTreeLister ts tsx java tf md
+ *   java FileTreeLister ts tsx java tf md yml
  */
 public class FileTreeLister {
 
@@ -32,7 +33,7 @@ public class FileTreeLister {
   public static final Set<String> SUPPORTED_FILE_TYPES =
       Set.of("java", "ts", "tsx", "js", "jsx", "kt", "py", "go", "cs", "json", "yml", "xml", "tf");
 
-  private static final Set<String> EXCLUDED_DIR_NAMES = Set.of("dist", "node_modules");
+  private static final Set<String> EXCLUDED_DIR_NAMES = Set.of("dist", "node_modules", "target", "build", "out");
   private static final Set<String> EXCLUDED_FILE_NAMES = Set.of("FileTreeLister.java", ".DS_Store");
 
   public static void main(String[] args) throws IOException {
@@ -108,8 +109,8 @@ public class FileTreeLister {
     if (EXCLUDED_FILE_NAMES.contains(fileName)) return false;
     if (fileName.endsWith(".d.ts")) return false;
 
-    // Always include Dockerfile
-    if ("Dockerfile".equals(fileName)) return true;
+    // Always include Dockerfile and .env
+    if ("Dockerfile".equals(fileName) || ".env".equals(fileName)) return true;
 
     // Always include anything under a path containing "resources"
     if (isUnderResources(relative)) return true;

@@ -56,6 +56,15 @@ ai_provider = "mock"  # use mock LLM in staging to avoid OpenAI charges
 frontend_bucket_location       = "US"
 frontend_cache_max_age_seconds = 60  # short TTL in staging for fast iteration
 
+# -- ML Service --
+# Scale to zero in staging to save cost. Model reloads on first request (~10s cold start).
+ml_artifact_image_tag = "latest"   # CI/CD overrides this with git SHA
+ml_min_instances      = 0
+ml_max_instances      = 2
+ml_cpu                = "1"
+ml_memory             = "1Gi"
+ml_cpu_idle           = true
+
 # -- Load balancer domains --
 # MANUAL STEP: Set to your staging domain, e.g. ["staging.yourdomain.com"]
 # Leave empty [] if you have no domain yet; HTTP only will be served.
@@ -80,5 +89,5 @@ ops_alert_email = "dev-alerts@example.com"
 tracing_sample_probability = "1.0"
 
 # -- Observability --
-alert_email        = "yourteam@yourdomain.com"  # MANUAL STEP: replace
+alert_email        = "yang@example.com"  # MANUAL STEP: replace
 log_retention_days = 90
