@@ -12,7 +12,6 @@ import com.intuit.taxrefund.assistant.infra.PrivacyFilter;
 import com.intuit.taxrefund.assistant.model.*;
 import com.intuit.taxrefund.assistant.nlp.IntentClassifier;
 import com.intuit.taxrefund.auth.jwt.JwtService;
-import com.intuit.taxrefund.llm.LlmClient;
 import com.intuit.taxrefund.llm.LlmClientRouter;
 import com.intuit.taxrefund.refund.controller.dto.RefundStatusResponse;
 import com.intuit.taxrefund.refund.service.RefundService;
@@ -26,6 +25,15 @@ import java.util.*;
 public class AssistantService {
 
     private static final Logger log = LogManager.getLogger(AssistantService.class);
+
+    // Rotated so the user doesn't see the exact same wording on every off-topic message
+    private static final List<String> OFF_TOPIC_REPLIES = List.of(
+        "I'm here to help with your tax refund. Try asking: \"What's my refund status?\","
+            + " \"When will I get my refund?\", or \"Why is my refund delayed?\"",
+        "That's outside what I can help with right now — I specialise in tax refund questions.",
+        "I didn't quite catch that in the context of your refund. Try asking about your"
+            + " status, estimated arrival date, or what to do if your refund is delayed."
+    );
 
     private final RefundService          refundService;
     private final PrivacyFilter          privacyFilter;
@@ -52,48 +60,69 @@ public class AssistantService {
         this.llmRouter      = llmRouter;     this.om             = om;
     }
 
-    // ── Main entry point ─────────────────────────────────────────────────────
-
     public AssistantChatResponse answer(JwtService.JwtPrincipal principal, String question) {
         long userId = principal.userId();
 
-        // 1. Load full conversation context (state + counters + history) from Redis
+        // 1. Load context
         ConversationContext ctx = stateStore.get(userId);
 
         // 2. Classify intent
         IntentClassifier.IntentResult r = classifier.classify(question);
-        AssistantIntent intent  = r.intent();
-        boolean isLowConf = intent == AssistantIntent.UNKNOWN || r.confidence() < 0.55;
+        AssistantIntent intent   = r.intent();
+        boolean isLowNlpConf     = intent == AssistantIntent.UNKNOWN || r.confidence() < 0.55;
 
         log.info("assistant_intent userId={} intent={} confidence={} model={} lowConf={}",
-            userId, intent, r.confidence(), r.model(), isLowConf);
+            userId, intent, r.confidence(), r.model(), isLowNlpConf);
 
-        // 3. Fetch live refund status
+        // 3. Fetch refund data & plan
         RefundStatusResponse refund = refundService.getLatestRefundStatus(principal, null);
-
-        // 4. Plan: chooses nextState, escalation flag, data to include
         AssistantPlan plan = planner.plan(ctx, intent, r.confidence(), refund.status());
 
-        log.info("assistant_plan userId={} nextState={} escalate={} troubleshootingTurns={} lowConfTurns={}",
-            userId, plan.nextState(), plan.escalate(),
-            ctx.troubleshootingTurns(), ctx.lowConfidenceTurns());
+        log.info("assistant_plan userId={} nextState={} escalate={} offTopic={} repeat={} gated={}",
+            userId, plan.nextState(), plan.escalate(), plan.offTopic(),
+            plan.repeatHint(), plan.stateGated());
 
-        // 5. Build citations and actions
+        // ── 4. Off-topic short-circuit ────────────────────────────────────────
+        // No LLM call, no state change, no quota consumed.
+        // Still persists the turn so repeated off-topic spam can escalate.
+        if (plan.offTopic()) {
+            log.info("assistant_off_topic userId={} confirmedState={}", userId, ctx.confirmedState());
+            String reply = OFF_TOPIC_REPLIES.get(ctx.turnCount() % OFF_TOPIC_REPLIES.size());
+            stateStore.set(userId, ctx.advance(
+                ctx.confirmedState(), AssistantIntent.OFF_TOPIC,
+                true, "LOW", question, reply));
+            return new AssistantChatResponse(reply, List.of(),
+                List.of(new Action(ActionType.REFRESH, "Refresh status")), Confidence.LOW);
+        }
+
+        // 5. Citations and actions
         List<AssistantChatResponse.Citation> citations = plan.includePolicySnippets()
             ? policySnippets.forStatus(refund.status()) : List.of();
         List<Action> actions = buildActions(refund, plan.escalate());
 
-        // 6. Call LLM
-        AssistantChatResponse response = callLlm(userId, question, ctx, refund, citations, actions, plan);
+        // 6. LLM call
+        AssistantChatResponse response = callLlm(
+            userId, question, ctx, refund, citations, actions, plan);
 
-        // 7. Persist updated context with this turn appended to history
-        String botAnswer = (response != null && response.answerMarkdown() != null)
-            ? response.answerMarkdown() : "";
-        stateStore.set(userId, ctx.advance(plan.nextState(), isLowConf, question, botAnswer));
+        // 7. Gate state advancement on LLM's own confidence
+        String llmConf = (response != null && response.confidence() != null)
+            ? response.confidence().name() : "LOW";
+
+        // 8. Commit – stateGated → stay at confirmedState
+        ConversationState toCommit = plan.stateGated()
+            ? ctx.confirmedState() : plan.nextState();
+
+        ConversationContext updated = ctx.advance(
+            toCommit, intent, isLowNlpConf, llmConf, question,
+            response != null && response.answerMarkdown() != null
+                ? response.answerMarkdown() : "");
+        stateStore.set(userId, updated);
+
+        log.info("assistant_ctx_committed userId={} confirmedState={} stateGated={} llmConf={}",
+            userId, updated.confirmedState(), plan.stateGated(), llmConf);
 
         return response != null
-            ? response
-            : buildDeterministicFallback(question, refund, citations, actions);
+            ? response : buildDeterministicFallback(question, refund, citations, actions);
     }
 
     // ── LLM orchestration ────────────────────────────────────────────────────
@@ -105,20 +134,19 @@ public class AssistantService {
     ) {
         Map<String, Object> authData = privacyFilter.buildAuthoritativeDataForLlm(refund, plan);
         authData.put("policies", citations);
-
-        String devPrompt  = buildDeveloperPrompt(plan.escalate());
+        String devPrompt  = buildDeveloperPrompt(plan.escalate(), plan.repeatHint());
         String userPrompt = buildUserPrompt(question, ctx, authData);
         Map<String, Object> schema = responseSchema();
 
-        LlmClient primary = llmRouter.primary();
-        log.info("assistant_llm_primary userId={} provider={} available={}", userId, primary.provider(), primary.isAvailable());
-
+        var primary = llmRouter.primary();
         if (!primary.isAvailable() || "mock".equalsIgnoreCase(primary.provider())) {
-            return parseOrFallback(llmRouter.callWithFallback(devPrompt, userPrompt, schema), actions, userId, primary.provider());
+            return parseOrFallback(llmRouter.callWithFallback(devPrompt, userPrompt, schema),
+                actions, userId, primary.provider());
         }
         if (!quota.tryConsumeDaily(userId, props.dailyOpenAiCallsPerUser())) {
             log.warn("assistant_quota_exceeded userId={}", userId);
-            return parseOrFallback(llmRouter.callWithFallback(devPrompt, userPrompt, schema), actions, userId, "quota-fallback");
+            return parseOrFallback(llmRouter.callWithFallback(devPrompt, userPrompt, schema),
+                actions, userId, "quota-fallback");
         }
         try {
             String json = llmRouter.callWithFallback(devPrompt, userPrompt, schema);
@@ -132,29 +160,33 @@ public class AssistantService {
 
     // ── Prompt builders ──────────────────────────────────────────────────────
 
-    private String buildDeveloperPrompt(boolean escalate) {
-        String base = """
-You are a TurboTax-like assistant. STRICT RULES:
-- Only use facts present in authoritativeData. Do NOT invent numbers or dates.
-- Do NOT request or reveal PII (SSN, bank account, address, full name).
-- Do NOT mention internal tracking IDs.
-- Return ONLY JSON matching the provided schema.
-""";
+    private String buildDeveloperPrompt(boolean escalate, boolean repeatHint) {
+        String base = "You are a TurboTax-like assistant helping users understand their tax refund.\n"
+            + "STRICT RULES:\n"
+            + "- Only use facts present in authoritativeData. Never invent numbers or dates.\n"
+            + "- Do NOT request or reveal PII (SSN, bank account, address, full name).\n"
+            + "- Do NOT mention internal tracking IDs.\n"
+            + "- Return ONLY valid JSON matching the provided schema.\n"
+            + "CONFIDENCE RATING (self-assess honestly):\n"
+            + "- HIGH   : authoritativeData fully answers the question with specific facts.\n"
+            + "- MEDIUM : authoritativeData partially answers; some info is general.\n"
+            + "- LOW    : you cannot give a complete, specific answer from the data provided.\n";
+        if (repeatHint) {
+            base += "\nREPEAT NOTICE: The user has asked a very similar question before and your "
+                + "previous answer did not satisfy them. Do NOT repeat the same explanation. "
+                + "Try a noticeably different approach: simplify the language, break into smaller "
+                + "steps, or acknowledge what you do not know and suggest concrete next actions.\n";
+        }
         if (escalate) {
-            base += """
-ESCALATION: The user appears stuck after multiple attempts. Empathetically acknowledge
-their frustration, summarise what you know about their refund, and clearly recommend
-they contact a human support agent for further help. Include CONTACT_SUPPORT in actions.
-""";
+            base += "\nESCALATION: The user has been stuck for several turns. Empathetically "
+                + "acknowledge their frustration, summarise the refund facts you have, and clearly "
+                + "recommend they contact a human support agent. Include CONTACT_SUPPORT in actions.\n";
         }
         return base;
     }
 
-    /**
-     * Injects conversation history so the LLM can produce coherent multi-turn replies.
-     * History entries are added above the current question.
-     */
-    private String buildUserPrompt(String question, ConversationContext ctx, Map<String, Object> authData) {
+    private String buildUserPrompt(String question, ConversationContext ctx,
+                                   Map<String, Object> authData) {
         StringBuilder sb = new StringBuilder();
         if (!ctx.history().isEmpty()) {
             sb.append("Conversation history (oldest first):\n");
@@ -169,13 +201,13 @@ they contact a human support agent for further help. Include CONTACT_SUPPORT in 
         return sb.toString();
     }
 
-    // ── Response parsing ─────────────────────────────────────────────────────
+    // ── Parsing ──────────────────────────────────────────────────────────────
 
-    private AssistantChatResponse parseOrFallback(String json, List<Action> defaultActions, long userId, String provider) {
+    private AssistantChatResponse parseOrFallback(String json, List<Action> defaultActions,
+                                                   long userId, String provider) {
         AssistantChatResponse parsed;
-        try {
-            parsed = parseStrict(json);
-        } catch (Exception e) {
+        try { parsed = parseStrict(json); }
+        catch (Exception e) {
             log.warn("assistant_llm_bad_output userId={} provider={} err={}", userId, provider, e.toString());
             return null;
         }
@@ -211,20 +243,20 @@ they contact a human support agent for further help. Include CONTACT_SUPPORT in 
           .append("**Tax year:** ").append(refund.taxYear()).append("\n")
           .append("**Last updated:** ").append(refund.lastUpdatedAt()).append("\n");
         if (refund.availableAtEstimated() != null
-                && !com.intuit.taxrefund.refund.model.RefundStatus.AVAILABLE.name().equals(refund.status())) {
+            && !com.intuit.taxrefund.refund.model.RefundStatus.AVAILABLE.name().equals(refund.status()))
             sb.append("**Estimated availability:** ").append(refund.availableAtEstimated()).append("\n");
-        }
         Confidence c = refund.availableAtEstimated() != null ? Confidence.MEDIUM : Confidence.LOW;
-        if (com.intuit.taxrefund.refund.model.RefundStatus.AVAILABLE.name().equals(refund.status())) c = Confidence.HIGH;
+        if (com.intuit.taxrefund.refund.model.RefundStatus.AVAILABLE.name().equals(refund.status()))
+            c = Confidence.HIGH;
         return new AssistantChatResponse(sb.toString(), citations, actions, c);
     }
 
     private AssistantChatResponse parseStrict(String json) {
         try { return om.readValue(json, AssistantChatResponse.class); }
-        catch (Exception e) { throw new IllegalArgumentException("LLM output parse failed: " + e.getMessage()); }
+        catch (Exception e) { throw new IllegalArgumentException("LLM parse failed: " + e.getMessage()); }
     }
 
-    // ── Action helpers ───────────────────────────────────────────────────────
+    // ── Actions ──────────────────────────────────────────────────────────────
 
     private static List<Action> buildActions(RefundStatusResponse refund, boolean escalate) {
         List<Action> out = new ArrayList<>();
@@ -240,10 +272,10 @@ they contact a human support agent for further help. Include CONTACT_SUPPORT in 
         return out;
     }
 
-    private static List<Action> mergeActions(List<Action> llmActions, List<Action> defaults) {
+    private static List<Action> mergeActions(List<Action> llm, List<Action> defaults) {
         List<Action> out = new ArrayList<>();
         Set<String> seen = new LinkedHashSet<>();
-        for (Action a : llmActions) {
+        for (Action a : llm) {
             if (a == null || a.type() == null) continue;
             if (seen.add(a.type().name() + "|" + (a.label() == null ? "" : a.label().trim()))) out.add(a);
         }
@@ -270,15 +302,18 @@ they contact a human support agent for further help. Include CONTACT_SUPPORT in 
                 "answerMarkdown", Map.of("type", "string"),
                 "citations", Map.of("type", "array", "items", Map.of(
                     "type", "object", "additionalProperties", false,
-                    "properties", Map.of("docId", Map.of("type","string"), "quote", Map.of("type","string")),
-                    "required", List.of("docId","quote"))),
+                    "properties", Map.of(
+                        "docId",  Map.of("type", "string"),
+                        "quote",  Map.of("type", "string")),
+                    "required", List.of("docId", "quote"))),
                 "actions", Map.of("type", "array", "items", Map.of(
                     "type", "object", "additionalProperties", false,
                     "properties", Map.of(
-                        "type", Map.of("type","string","enum",List.of("REFRESH","CONTACT_SUPPORT","SHOW_TRACKING")),
-                        "label", Map.of("type","string")),
-                    "required", List.of("type","label"))),
-                "confidence", Map.of("type","string","enum",List.of("LOW","MEDIUM","HIGH"))),
+                        "type",  Map.of("type", "string",
+                                        "enum", List.of("REFRESH","CONTACT_SUPPORT","SHOW_TRACKING")),
+                        "label", Map.of("type", "string")),
+                    "required", List.of("type", "label"))),
+                "confidence", Map.of("type","string","enum", List.of("LOW","MEDIUM","HIGH"))),
             "required", List.of("answerMarkdown","citations","actions","confidence")));
         return schema;
     }
