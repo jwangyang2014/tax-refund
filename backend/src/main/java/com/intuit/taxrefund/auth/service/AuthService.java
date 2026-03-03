@@ -8,6 +8,7 @@ import com.intuit.taxrefund.auth.model.RefreshToken;
 import com.intuit.taxrefund.auth.model.Role;
 import com.intuit.taxrefund.auth.repository.RefreshTokenRepository;
 import com.intuit.taxrefund.auth.repository.UserRepository;
+import jakarta.transaction.Transactional;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Value;
@@ -114,6 +115,7 @@ public class AuthService {
         }
     }
 
+    @Transactional
     public AuthTokens refresh(String refreshCookie) {
         ParseRefreshToken parsed = ParseRefreshToken.parse(refreshCookie);
 
