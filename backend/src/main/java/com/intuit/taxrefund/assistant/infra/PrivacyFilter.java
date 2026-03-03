@@ -1,5 +1,6 @@
 package com.intuit.taxrefund.assistant.infra;
 
+import com.intuit.taxrefund.assistant.model.AssistantPlan;
 import com.intuit.taxrefund.refund.controller.dto.RefundStatusResponse;
 import org.springframework.stereotype.Component;
 
@@ -10,23 +11,37 @@ import java.util.Map;
 @Component
 public class PrivacyFilter {
     /**
-     * Authoritative data allowed to be sent to external LLM providers.
-     * DO NOT include: trackingId, userId, names, addresses, SSN, bank info, exact amounts (optional).
+     * Build authoritative data allowed to be sent to external LLM providers.
+     *
+     * Planner flags decide which sections are included:
+     * - includeRefundStatus -> include refund status metadata
+     * - includeEta          -> include ETA metadata
+     *
+     * Privacy rules:
+     * - DO NOT include trackingId, userId, names, addresses, SSN, bank info
+     * - Use amount bucket instead of exact amount
      */
-    public Map<String, Object> buildAuthoritativeDataForLlm(RefundStatusResponse refund) {
-        Map<String, Object> refundSafe = new LinkedHashMap<>();
-        refundSafe.put("taxYear", refund.taxYear());
-        refundSafe.put("status", refund.status());
-        refundSafe.put("lastUpdatedAt", refund.lastUpdatedAt());
-        refundSafe.put("expectedAmountBucket", bucketAmount(refund.expectedAmount())); // bucket, not exact
-        // intentionally omit trackingId
-
-        Map<String, Object> etaSafe = new LinkedHashMap<>();
-        etaSafe.put("estimatedAvailableAt", refund.availableAtEstimated());
-
+    public Map<String, Object> buildAuthoritativeDataForLlm(
+        RefundStatusResponse refund,
+        AssistantPlan plan
+    ) {
         Map<String, Object> root = new LinkedHashMap<>();
-        root.put("refund", refundSafe);
-        root.put("eta", etaSafe);
+
+        if (plan.includeRefundStatus()) {
+            Map<String, Object> refundSafe = new LinkedHashMap<>();
+            refundSafe.put("taxYear", refund.taxYear());
+            refundSafe.put("status", refund.status());
+            refundSafe.put("lastUpdatedAt", refund.lastUpdatedAt());
+            refundSafe.put("expectedAmountBucket", bucketAmount(refund.expectedAmount()));
+            root.put("refund", refundSafe);
+        }
+
+        if (plan.includeEta()) {
+            Map<String, Object> etaSafe = new LinkedHashMap<>();
+            etaSafe.put("estimatedAvailableAt", refund.availableAtEstimated());
+            root.put("eta", etaSafe);
+        }
+
         return root;
     }
 

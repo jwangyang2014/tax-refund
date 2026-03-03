@@ -15,6 +15,7 @@ import com.intuit.taxrefund.auth.jwt.JwtService;
 import com.intuit.taxrefund.llm.LlmClient;
 import com.intuit.taxrefund.llm.LlmClientRouter;
 import com.intuit.taxrefund.refund.controller.dto.RefundStatusResponse;
+import com.intuit.taxrefund.refund.model.RefundStatus;
 import com.intuit.taxrefund.refund.service.RefundService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -76,8 +77,9 @@ public class AssistantService {
         RefundStatusResponse refund = refundService.getLatestRefundStatus(principal, null);
         AssistantPlan plan = planner.plan(prev, intent, r.confidence(), refund.status());
 
-        log.info("assistant_plan userId={} intent={} refundStatus={} nextState={}",
-            userId, intent, refund.status(), plan.nextState());
+        log.info("assistant_plan userId={} intent={} refundStatus={} nextState={} includeRefundStatus={} includeEta={} includePolicySnippets={}",
+            userId, intent, refund.status(), plan.nextState(),
+            plan.includeRefundStatus(), plan.includeEta(), plan.includePolicySnippets());
 
         List<AssistantChatResponse.Citation> citations = plan.includePolicySnippets()
             ? policySnippets.forStatus(refund.status())
@@ -87,7 +89,7 @@ public class AssistantService {
 
         stateStore.set(userId, plan.nextState());
 
-        Map<String, Object> authoritativeData = privacyFilter.buildAuthoritativeDataForLlm(refund);
+        Map<String, Object> authoritativeData = privacyFilter.buildAuthoritativeDataForLlm(refund, plan);
         authoritativeData.put("policies", citations);
 
         Map<String, Object> schema = responseSchema();
@@ -113,22 +115,28 @@ authoritativeData:
             userId, primary.provider(), primary.model(), primary.isAvailable());
 
         if (!primary.isAvailable() || "mock".equalsIgnoreCase(primary.provider())) {
-            return parseOrFallback(
+            AssistantChatResponse mockResp = parseOrFallback(
                 llmRouter.callWithFallback(developerPrompt, userPrompt, schema),
                 actions,
                 userId,
                 primary.provider()
             );
+            return mockResp != null
+                ? mockResp
+                : buildDeterministicFallback(question, refund, citations, actions, plan);
         }
 
         if (!quota.tryConsumeDaily(userId, props.dailyOpenAiCallsPerUser())) {
             log.warn("assistant_quota_exceeded userId={}", userId);
-            return parseOrFallback(
+            AssistantChatResponse quotaResp = parseOrFallback(
                 llmRouter.callWithFallback(developerPrompt, userPrompt, schema),
                 actions,
                 userId,
                 "quota-fallback"
             );
+            return quotaResp != null
+                ? quotaResp
+                : buildDeterministicFallback(question, refund, citations, actions, plan);
         }
 
         String json;
@@ -145,12 +153,12 @@ authoritativeData:
             log.error("assistant_llm_call_failed userId={} provider={} err={}",
                 userId, primary.provider(), e.toString());
 
-            return buildDeterministicFallback(question, refund, citations, actions);
+            return buildDeterministicFallback(question, refund, citations, actions, plan);
         }
 
         AssistantChatResponse parsed = parseOrFallback(json, actions, userId, primary.provider());
         if (parsed == null) {
-            return buildDeterministicFallback(question, refund, citations, actions);
+            return buildDeterministicFallback(question, refund, citations, actions, plan);
         }
 
         return parsed;
@@ -212,24 +220,42 @@ authoritativeData:
         String question,
         RefundStatusResponse refund,
         List<AssistantChatResponse.Citation> citations,
-        List<Action> actions
+        List<Action> actions,
+        AssistantPlan plan
     ) {
         StringBuilder sb = new StringBuilder();
-        sb.append("**Your question:** ").append(question).append("\n\n")
-            .append("**Latest refund status:** ").append(refund.status()).append("\n")
-            .append("**Tax year:** ").append(refund.taxYear()).append("\n")
-            .append("**Last updated:** ").append(refund.lastUpdatedAt()).append("\n");
+        sb.append("**Your question:** ").append(question).append("\n\n");
 
-        if (refund.availableAtEstimated() != null && !com.intuit.taxrefund.refund.model.RefundStatus.AVAILABLE.name().equals(refund.status())) {
+        if (plan.includeRefundStatus()) {
+            sb.append("**Latest refund status:** ").append(refund.status()).append("\n")
+                .append("**Tax year:** ").append(refund.taxYear()).append("\n")
+                .append("**Last updated:** ").append(refund.lastUpdatedAt()).append("\n");
+        }
+
+        if (plan.includeEta()
+            && refund.availableAtEstimated() != null
+            && !RefundStatus.AVAILABLE.name().equals(refund.status())
+            && !RefundStatus.REJECTED.name().equals(refund.status())) {
             sb.append("**Estimated availability:** ").append(refund.availableAtEstimated()).append("\n");
         }
 
-        Confidence c = refund.availableAtEstimated() != null ? Confidence.MEDIUM : Confidence.LOW;
-        if (com.intuit.taxrefund.refund.model.RefundStatus.AVAILABLE.name().equals(refund.status())) {
-            c = Confidence.HIGH;
+        if (!plan.includeRefundStatus() && !plan.includeEta()) {
+            sb.append("I can help with your refund workflow, but this plan did not expose refund status or ETA details.\n");
         }
 
+        Confidence c = deriveConfidence(refund, plan);
+
         return new AssistantChatResponse(sb.toString(), citations, actions, c);
+    }
+
+    private static Confidence deriveConfidence(RefundStatusResponse refund, AssistantPlan plan) {
+        if (plan.includeRefundStatus() && RefundStatus.AVAILABLE.name().equals(refund.status())) {
+            return Confidence.HIGH;
+        }
+        if (plan.includeEta() && refund.availableAtEstimated() != null) {
+            return Confidence.MEDIUM;
+        }
+        return Confidence.LOW;
     }
 
     private AssistantChatResponse parseStrict(String json) {
