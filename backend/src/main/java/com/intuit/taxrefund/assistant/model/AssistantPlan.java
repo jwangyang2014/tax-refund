@@ -43,18 +43,6 @@ public record AssistantPlan(
             escalate, false, false, false);
     }
 
-    /** Gated / repeat plan. */
-    public AssistantPlan(ConversationState nextState,
-                         boolean includeRefundStatus,
-                         boolean includeEta,
-                         boolean includePolicySnippets,
-                         boolean escalate,
-                         boolean repeatHint,
-                         boolean stateGated) {
-        this(nextState, includeRefundStatus, includeEta, includePolicySnippets,
-            escalate, repeatHint, stateGated, false);
-    }
-
     // ── Static factories for clarity at call sites ────────────────────────────
 
     /** Off-topic plan: stay in confirmedState, no LLM call. */
