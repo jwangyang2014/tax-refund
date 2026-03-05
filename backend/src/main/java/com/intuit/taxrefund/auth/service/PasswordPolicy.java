@@ -2,8 +2,6 @@ package com.intuit.taxrefund.auth.service;
 
 import org.springframework.stereotype.Component;
 
-import java.util.stream.IntStream;
-
 @Component
 public class PasswordPolicy {
     public void validate(String password) {
